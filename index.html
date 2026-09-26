@@ -5,9 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Spine Viewer</title>
 
-<!-- Spine WebGL runtime — GANTI VERSI kalau model tampil pecah/error.
-     Coba 4.2, 4.1, 4.0, atau 3.8 sesuai versi Spine asli aset. -->
-<script src="https://cdn.jsdelivr.net/npm/@esotericsoftware/spine-webgl@4.2.36/dist/iife/spine-webgl.js"></script>
+<!-- Spine WebGL runtime — dipin ke cabang 4.1.x karena file .skel diekspor dari Spine 4.1.23 -->
+<script src="https://unpkg.com/@esotericsoftware/spine-webgl@4.1.*/dist/iife/spine-webgl.js"></script>
 <!-- Untuk export GIF -->
 <script src="https://cdn.jsdelivr.net/npm/gif.js.optimized@1.0.1/dist/gif.js"></script>
 
@@ -157,9 +156,10 @@
 // ============================================================
 // KONFIGURASI — ganti sesuai nama file asetmu
 // ============================================================
-const ASSET_NAME = "1505";              // nama dasar file (tanpa ekstensi)
-const USE_HD = false;                    // true kalau mau pakai 1505HD.atlas/.webp
-const ASSET_BASE = USE_HD ? ASSET_NAME + "HD" : ASSET_NAME;
+const ASSET_NAME = "1505";              // nama dasar (dipakai untuk .skel — selalu tanpa HD)
+const USE_HD = true;                     // true = pakai 1505HD.atlas/.webp, false = pakai 1505.atlas/.webp
+const ASSET_BASE = USE_HD ? ASSET_NAME + "HD" : ASSET_NAME;  // dipakai untuk .atlas & .webp
+const SKEL_PATH = ASSET_NAME + ".skel";  // skel selalu satu, dipakai bareng SD maupun HD
 
 // ============================================================
 // SETUP CANVAS + SPINE
@@ -179,58 +179,159 @@ const shader = spine.webgl.Shader.newTwoColoredTextured(gl);
 const batcher = new spine.webgl.PolygonBatcher(gl);
 const mvp = new spine.webgl.Matrix4();
 const skeletonRenderer = new spine.webgl.SkeletonRenderer(gl);
-const assetManager = new spine.webgl.AssetManager(gl);
 
 let bgImage = null;
 let renderBackground = false;
 
-assetManager.loadBinary(ASSET_BASE + ".skel");
-assetManager.loadTextureAtlas(ASSET_BASE + ".atlas");
+// ============================================================
+// KONVERTER ATLAS KUSTOM → FORMAT STANDAR SPINE
+// Format asli file kamu pakai "bounds:" dan "offsets:" (bukan xy/size/orig/offset
+// standar Spine), jadi harus diterjemahkan dulu sebelum diserahkan ke parser resmi.
+// ============================================================
+function convertCustomAtlas(text) {
+  const lines = text.split(/\r?\n/).map(l => l.trim()).filter(l => l.length > 0);
+  let i = 0;
+  const pageName = lines[i++];
+  const size = lines[i++].split(":")[1].split(",").map(s => s.trim());
+  const filter = lines[i++].split(":")[1].split(",").map(s => s.trim());
+  if (lines[i] && lines[i].toLowerCase().startsWith("scale:")) i++; // field non-standar, dilewati
 
+  let out = pageName + "\n";
+  out += "size: " + size[0] + "," + size[1] + "\n";
+  out += "format: RGBA8888\n";
+  out += "filter: " + filter[0] + "," + filter[1] + "\n";
+  out += "repeat: none\n";
+
+  while (i < lines.length) {
+    const name = lines[i++];
+    if (!lines[i] || !lines[i].toLowerCase().startsWith("bounds:")) continue; // lewati baris ganjil
+    const b = lines[i++].split(":")[1].split(",").map(Number);
+    const o = lines[i] && lines[i].toLowerCase().startsWith("offsets:")
+      ? lines[i++].split(":")[1].split(",").map(Number)
+      : [0, 0, b[2], b[3]];
+    let rotate = false;
+    if (lines[i] && lines[i].toLowerCase().startsWith("rotate:")) { rotate = true; i++; }
+
+    out += name + "\n";
+    out += "  rotate: " + rotate + "\n";
+    out += "  xy: " + b[0] + ", " + b[1] + "\n";
+    out += "  size: " + b[2] + ", " + b[3] + "\n";
+    out += "  orig: " + o[2] + ", " + o[3] + "\n";
+    out += "  offset: " + o[0] + ", " + o[1] + "\n";
+    out += "  index: -1\n";
+  }
+  return out;
+}
+
+let bgImage = null;
+let renderBackground = false;
 let skeleton, animationState, bounds;
 let playing = true;
 let lastFrameTime = Date.now() / 1000;
+let initFailed = false;
+let ready = false;
 
 const statusEl = document.getElementById("status");
 
-let initFailed = false;
-let loadStartTime = Date.now();
+// ============================================================
+// PROSES LOADING: fetch manual (bukan lewat assetManager.loadTextureAtlas,
+// karena parser bawaan tidak paham format atlas kustom ini)
+// ============================================================
+async function loadEverything() {
+  try {
+    statusEl.textContent = "Mengunduh file...";
+
+    const [atlasRaw, skelBuffer] = await Promise.all([
+      fetch(ASSET_BASE + ".atlas", { cache: "no-store" }).then(r => {
+        if (!r.ok) throw new Error(ASSET_BASE + ".atlas → HTTP " + r.status);
+        return r.text();
+      }),
+      fetch(SKEL_PATH, { cache: "no-store" }).then(r => {
+        if (!r.ok) throw new Error(SKEL_PATH + " → HTTP " + r.status);
+        return r.arrayBuffer();
+      })
+    ]);
+
+    statusEl.textContent = "Memuat tekstur...";
+    const textureImage = await new Promise((resolve, reject) => {
+      const img = new Image();
+      img.crossOrigin = "anonymous";
+      img.onload = () => resolve(img);
+      img.onerror = () => reject(new Error(ASSET_BASE + ".webp gagal dimuat (404 / CORS)"));
+      img.src = ASSET_BASE + ".webp";
+    });
+
+    statusEl.textContent = "Mem-parsing atlas...";
+    const standardAtlasText = convertCustomAtlas(atlasRaw);
+    const glTexture = new spine.webgl.GLTexture(gl, textureImage);
+    const atlas = new spine.TextureAtlas(standardAtlasText, () => glTexture);
+
+    statusEl.textContent = "Mem-parsing skeleton...";
+    const atlasLoader = new spine.AtlasAttachmentLoader(atlas);
+    const skeletonBinary = new spine.SkeletonBinary(atlasLoader);
+    const skeletonData = skeletonBinary.readSkeletonData(new Uint8Array(skelBuffer));
+
+    skeleton = new spine.Skeleton(skeletonData);
+    bounds = calculateBounds(skeleton);
+    skeleton.x = 0;
+    skeleton.y = 0;
+
+    const animStateData = new spine.AnimationStateData(skeleton.data);
+    animationState = new spine.AnimationState(animStateData);
+
+    const skinSelect = document.getElementById("skinSelect");
+    skeletonData.skins.forEach(s => {
+      const opt = document.createElement("option");
+      opt.value = s.name; opt.textContent = s.name;
+      skinSelect.appendChild(opt);
+    });
+    skinSelect.onchange = () => {
+      skeleton.setSkinByName(skinSelect.value);
+      skeleton.setSlotsToSetupPose();
+    };
+
+    const animSelect = document.getElementById("animSelect");
+    skeletonData.animations.forEach(a => {
+      const opt = document.createElement("option");
+      opt.value = a.name; opt.textContent = a.name;
+      animSelect.appendChild(opt);
+    });
+    animSelect.onchange = () => {
+      animationState.setAnimation(0, animSelect.value, true);
+    };
+
+    if (skeletonData.animations.length > 0) {
+      animationState.setAnimation(0, skeletonData.animations[0].name, true);
+      animSelect.value = skeletonData.animations[0].name;
+    }
+    if (skeletonData.skins.length > 0) {
+      skeleton.setSkinByName(skeletonData.skins[0].name);
+    }
+
+    statusEl.textContent = "Siap. " + skeletonData.animations.length + " animasi, " +
+      skeletonData.skins.length + " skin ditemukan.";
+    ready = true;
+    lastFrameTime = Date.now() / 1000;
+
+  } catch (e) {
+    initFailed = true;
+    statusEl.innerHTML = "<b style='color:#e07a3f'>GAGAL:</b><br>" + (e.message || e) +
+      "<br><small>" + (e.stack ? e.stack.split("\n").slice(0, 4).join("<br>") : "") + "</small>";
+    console.error(e);
+  }
+}
+
+loadEverything();
 
 function loop() {
   requestAnimationFrame(loop);
-  if (initFailed) return;
-
-  if (!assetManager.isLoadingComplete()) {
-    // tampilkan progress loading & cek error dari asset manager
-    const errs = assetManager.getErrors ? assetManager.getErrors() : {};
-    if (errs && Object.keys(errs).length > 0) {
-      initFailed = true;
-      statusEl.innerHTML = "<b>GAGAL MEMUAT ASET:</b><br>" +
-        Object.entries(errs).map(([k, v]) => k + " → " + v).join("<br>");
-      return;
-    }
-    const elapsed = ((Date.now() - loadStartTime) / 1000).toFixed(0);
-    statusEl.textContent = "Memuat aset... (" + elapsed + "s)";
-    return;
-  }
-
-  if (!skeleton) {
-    try {
-      init();
-    } catch (e) {
-      initFailed = true;
-      statusEl.innerHTML = "<b>GAGAL INIT (kemungkinan versi runtime tidak cocok):</b><br>" +
-        (e.message || e);
-      console.error(e);
-      return;
-    }
-  }
-
-  const now = Date.now() / 1000;
-  const delta = now - lastFrameTime;
-  lastFrameTime = now;
+  if (initFailed || !ready) return;
 
   try {
+    const now = Date.now() / 1000;
+    const delta = now - lastFrameTime;
+    lastFrameTime = now;
+
     if (playing) {
       animationState.update(delta);
       animationState.apply(skeleton);
@@ -239,56 +340,10 @@ function loop() {
     render();
   } catch (e) {
     initFailed = true;
-    statusEl.innerHTML = "<b>GAGAL RENDER:</b><br>" + (e.message || e);
+    statusEl.innerHTML = "<b style='color:#e07a3f'>ERROR RENDER:</b><br>" + (e.message || e) +
+      "<br><small>" + (e.stack ? e.stack.split("\n").slice(0, 4).join("<br>") : "") + "</small>";
     console.error(e);
   }
-}
-
-function init() {
-  const atlas = assetManager.get(ASSET_BASE + ".atlas");
-  const atlasLoader = new spine.AtlasAttachmentLoader(atlas);
-  const skeletonBinary = new spine.SkeletonBinary(atlasLoader);
-  const skeletonData = skeletonBinary.readSkeletonData(assetManager.get(ASSET_BASE + ".skel"));
-
-  skeleton = new spine.Skeleton(skeletonData);
-  bounds = calculateBounds(skeleton);
-  skeleton.x = 0;
-  skeleton.y = 0;
-
-  const animStateData = new spine.AnimationStateData(skeleton.data);
-  animationState = new spine.AnimationState(animStateData);
-
-  // isi dropdown skin & animasi
-  const skinSelect = document.getElementById("skinSelect");
-  skeletonData.skins.forEach(s => {
-    const opt = document.createElement("option");
-    opt.value = s.name; opt.textContent = s.name;
-    skinSelect.appendChild(opt);
-  });
-  skinSelect.onchange = () => {
-    skeleton.setSkinByName(skinSelect.value);
-    skeleton.setSlotsToSetupPose();
-  };
-
-  const animSelect = document.getElementById("animSelect");
-  skeletonData.animations.forEach(a => {
-    const opt = document.createElement("option");
-    opt.value = a.name; opt.textContent = a.name;
-    animSelect.appendChild(opt);
-  });
-  animSelect.onchange = () => {
-    animationState.setAnimation(0, animSelect.value, true);
-  };
-
-  if (skeletonData.animations.length > 0) {
-    animationState.setAnimation(0, skeletonData.animations[0].name, true);
-    animSelect.value = skeletonData.animations[0].name;
-  }
-  if (skeletonData.skins.length > 0) {
-    skeleton.setSkinByName(skeletonData.skins[0].name);
-  }
-
-  statusEl.textContent = "Siap. " + skeletonData.animations.length + " animasi ditemukan.";
 }
 
 function calculateBounds(skeleton) {
