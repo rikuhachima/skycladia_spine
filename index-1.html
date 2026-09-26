@@ -1,0 +1,428 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Spine Viewer</title>
+
+<!-- Spine WebGL runtime — GANTI VERSI kalau model tampil pecah/error.
+     Coba 4.2, 4.1, 4.0, atau 3.8 sesuai versi Spine asli aset. -->
+<script src="https://cdn.jsdelivr.net/npm/@esotericsoftware/spine-webgl@4.2.36/dist/iife/spine-webgl.js"></script>
+<!-- Untuk export GIF -->
+<script src="https://cdn.jsdelivr.net/npm/gif.js.optimized@1.0.1/dist/gif.js"></script>
+
+<style>
+  :root {
+    --bg: #14100e;
+    --panel: #1c1815;
+    --accent: #e07a3f;
+    --text: #ecdfd2;
+    --border: #3a322c;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0; height: 100%;
+    background: var(--bg); color: var(--text);
+    font-family: 'Georgia', serif;
+    overflow: hidden;
+  }
+  #stage {
+    position: relative; width: 100%; height: 100%;
+  }
+  #canvas {
+    width: 100%; height: 100%; display: block;
+    touch-action: none; cursor: grab;
+  }
+  #canvas:active { cursor: grabbing; }
+
+  #toggleBtn {
+    position: absolute; top: 12px; right: 12px; z-index: 20;
+    background: var(--panel); border: 1px solid var(--accent);
+    color: var(--text); border-radius: 8px; padding: 8px 14px;
+    cursor: pointer; font-family: inherit;
+  }
+
+  #panel {
+    position: absolute; top: 0; right: 0; height: 100%;
+    width: 320px; max-width: 90vw;
+    background: rgba(20, 16, 14, 0.97);
+    border-left: 1px solid var(--border);
+    padding: 20px 16px; overflow-y: auto;
+    transform: translateX(0);
+    transition: transform 0.25s ease;
+    z-index: 10;
+  }
+  #panel.hidden { transform: translateX(105%); }
+
+  #panel h3 {
+    margin: 18px 0 8px; font-size: 14px; letter-spacing: 1px;
+    color: var(--accent); text-transform: uppercase; border-bottom: 1px solid var(--border);
+    padding-bottom: 6px;
+  }
+  #panel h3:first-child { margin-top: 0; }
+
+  select, input[type="text"], input[type="number"] {
+    width: 100%; background: var(--panel); color: var(--text);
+    border: 1px solid var(--border); border-radius: 6px; padding: 8px;
+    font-family: inherit; margin-bottom: 8px;
+  }
+
+  .btn {
+    width: 100%; background: transparent; color: var(--text);
+    border: 1px solid var(--accent); border-radius: 6px; padding: 10px;
+    cursor: pointer; font-family: inherit; margin-bottom: 8px;
+    transition: background 0.15s;
+  }
+  .btn:hover { background: rgba(224,122,63,0.15); }
+  .btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+  .row { display: flex; gap: 8px; }
+  .row > * { flex: 1; }
+
+  .switch-row {
+    display: flex; align-items: center; gap: 10px; margin-bottom: 10px;
+  }
+  .switch-row label { font-size: 13px; }
+
+  .slider-label {
+    display: flex; justify-content: space-between; font-size: 12px;
+    margin-bottom: 4px; color: #b5a89a;
+  }
+  input[type="range"] { width: 100%; margin-bottom: 12px; accent-color: var(--accent); }
+
+  #status {
+    font-size: 12px; color: #b5a89a; margin-top: 10px; min-height: 18px;
+  }
+
+  #progressWrap {
+    display: none; margin-top: 10px;
+  }
+  #progressBar {
+    height: 6px; background: var(--panel); border-radius: 4px; overflow: hidden;
+    border: 1px solid var(--border);
+  }
+  #progressFill {
+    height: 100%; width: 0%; background: var(--accent); transition: width 0.1s;
+  }
+</style>
+</head>
+<body>
+
+<div id="stage">
+  <canvas id="canvas"></canvas>
+  <button id="toggleBtn">☰ Panel</button>
+
+  <div id="panel">
+    <h3>Model</h3>
+    <select id="skinSelect"></select>
+    <select id="animSelect"></select>
+
+    <div class="row">
+      <button class="btn" id="playPauseBtn">Pause</button>
+      <button class="btn" id="resetBtn">Reset</button>
+    </div>
+
+    <h3>Background</h3>
+    <div class="switch-row">
+      <input type="checkbox" id="renderBg">
+      <label for="renderBg">Render Background</label>
+    </div>
+    <input type="text" id="bgUrl" placeholder="https://... (URL gambar background)">
+    <button class="btn" id="loadBgBtn">Load Background</button>
+
+    <h3>Export</h3>
+    <div class="slider-label"><span>Frame Rate</span><span id="fpsVal">30</span></div>
+    <input type="range" id="fpsRange" min="10" max="60" value="30">
+
+    <div class="slider-label"><span>Durasi (detik)</span><span id="durVal">3</span></div>
+    <input type="range" id="durRange" min="1" max="15" value="3">
+
+    <div class="slider-label"><span>Quality (GIF, lebih kecil = lebih baik)</span><span id="qVal">10</span></div>
+    <input type="range" id="qRange" min="1" max="20" value="10">
+
+    <div class="row">
+      <button class="btn" id="exportGif">Export GIF</button>
+      <button class="btn" id="exportWebm">Export WebM</button>
+    </div>
+
+    <div id="progressWrap">
+      <div id="progressBar"><div id="progressFill"></div></div>
+    </div>
+
+    <div id="status">Memuat aset...</div>
+  </div>
+</div>
+
+<script>
+// ============================================================
+// KONFIGURASI — ganti sesuai nama file asetmu
+// ============================================================
+const ASSET_NAME = "1505";              // nama dasar file (tanpa ekstensi)
+const USE_HD = false;                    // true kalau mau pakai 1505HD.atlas/.webp
+const ASSET_BASE = USE_HD ? ASSET_NAME + "HD" : ASSET_NAME;
+
+// ============================================================
+// SETUP CANVAS + SPINE
+// ============================================================
+const canvas = document.getElementById("canvas");
+function resizeCanvas() {
+  canvas.width = canvas.clientWidth * devicePixelRatio;
+  canvas.height = canvas.clientHeight * devicePixelRatio;
+}
+window.addEventListener("resize", resizeCanvas);
+resizeCanvas();
+
+const gl = canvas.getContext("webgl", { alpha: true, premultipliedAlpha: true }) ||
+           canvas.getContext("experimental-webgl", { alpha: true, premultipliedAlpha: true });
+
+const shader = spine.webgl.Shader.newTwoColoredTextured(gl);
+const batcher = new spine.webgl.PolygonBatcher(gl);
+const mvp = new spine.webgl.Matrix4();
+const skeletonRenderer = new spine.webgl.SkeletonRenderer(gl);
+const assetManager = new spine.webgl.AssetManager(gl);
+
+let bgImage = null;
+let renderBackground = false;
+
+assetManager.loadBinary(ASSET_BASE + ".skel");
+assetManager.loadTextureAtlas(ASSET_BASE + ".atlas");
+
+let skeleton, animationState, bounds;
+let playing = true;
+let lastFrameTime = Date.now() / 1000;
+
+const statusEl = document.getElementById("status");
+
+function loop() {
+  requestAnimationFrame(loop);
+  if (!assetManager.isLoadingComplete()) return;
+
+  if (!skeleton) init();
+
+  const now = Date.now() / 1000;
+  const delta = now - lastFrameTime;
+  lastFrameTime = now;
+
+  if (playing) {
+    animationState.update(delta);
+    animationState.apply(skeleton);
+  }
+  skeleton.updateWorldTransform();
+
+  render();
+}
+
+function init() {
+  const atlas = assetManager.get(ASSET_BASE + ".atlas");
+  const atlasLoader = new spine.AtlasAttachmentLoader(atlas);
+  const skeletonBinary = new spine.SkeletonBinary(atlasLoader);
+  const skeletonData = skeletonBinary.readSkeletonData(assetManager.get(ASSET_BASE + ".skel"));
+
+  skeleton = new spine.Skeleton(skeletonData);
+  bounds = calculateBounds(skeleton);
+  skeleton.x = 0;
+  skeleton.y = 0;
+
+  const animStateData = new spine.AnimationStateData(skeleton.data);
+  animationState = new spine.AnimationState(animStateData);
+
+  // isi dropdown skin & animasi
+  const skinSelect = document.getElementById("skinSelect");
+  skeletonData.skins.forEach(s => {
+    const opt = document.createElement("option");
+    opt.value = s.name; opt.textContent = s.name;
+    skinSelect.appendChild(opt);
+  });
+  skinSelect.onchange = () => {
+    skeleton.setSkinByName(skinSelect.value);
+    skeleton.setSlotsToSetupPose();
+  };
+
+  const animSelect = document.getElementById("animSelect");
+  skeletonData.animations.forEach(a => {
+    const opt = document.createElement("option");
+    opt.value = a.name; opt.textContent = a.name;
+    animSelect.appendChild(opt);
+  });
+  animSelect.onchange = () => {
+    animationState.setAnimation(0, animSelect.value, true);
+  };
+
+  if (skeletonData.animations.length > 0) {
+    animationState.setAnimation(0, skeletonData.animations[0].name, true);
+    animSelect.value = skeletonData.animations[0].name;
+  }
+  if (skeletonData.skins.length > 0) {
+    skeleton.setSkinByName(skeletonData.skins[0].name);
+  }
+
+  statusEl.textContent = "Siap. " + skeletonData.animations.length + " animasi ditemukan.";
+}
+
+function calculateBounds(skeleton) {
+  skeleton.setToSetupPose();
+  skeleton.updateWorldTransform();
+  const offset = new spine.Vector2();
+  const size = new spine.Vector2();
+  skeleton.getBounds(offset, size, []);
+  return { offset, size };
+}
+
+function render() {
+  resizeCanvas();
+  gl.clearColor(0, 0, 0, 0);
+  gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+  gl.viewport(0, 0, canvas.width, canvas.height);
+
+  const centerX = bounds.offset.x + bounds.size.x / 2;
+  const centerY = bounds.offset.y + bounds.size.y / 2;
+  const scale = Math.max(bounds.size.x / canvas.width, bounds.size.y / canvas.height) * 1.3;
+
+  mvp.ortho2d(centerX - canvas.width * scale / 2, centerY - canvas.height * scale / 2,
+              canvas.width * scale, canvas.height * scale);
+
+  shader.bind();
+  shader.setUniformi(spine.webgl.Shader.SAMPLER, 0);
+  shader.setUniform4x4f(spine.webgl.Shader.MVP_MATRIX, mvp.values);
+
+  batcher.begin(shader);
+  skeletonRenderer.premultipliedAlpha = true;
+  skeletonRenderer.draw(batcher, skeleton);
+  batcher.end();
+
+  shader.unbind();
+}
+
+loop();
+
+// ============================================================
+// UI CONTROLS
+// ============================================================
+document.getElementById("toggleBtn").onclick = () => {
+  document.getElementById("panel").classList.toggle("hidden");
+};
+
+document.getElementById("playPauseBtn").onclick = (e) => {
+  playing = !playing;
+  e.target.textContent = playing ? "Pause" : "Play";
+};
+
+document.getElementById("resetBtn").onclick = () => {
+  if (skeleton && animationState) {
+    const animSelect = document.getElementById("animSelect");
+    animationState.setAnimation(0, animSelect.value, true);
+  }
+};
+
+document.getElementById("fpsRange").oninput = (e) => {
+  document.getElementById("fpsVal").textContent = e.target.value;
+};
+document.getElementById("durRange").oninput = (e) => {
+  document.getElementById("durVal").textContent = e.target.value;
+};
+document.getElementById("qRange").oninput = (e) => {
+  document.getElementById("qVal").textContent = e.target.value;
+};
+
+document.getElementById("loadBgBtn").onclick = () => {
+  const url = document.getElementById("bgUrl").value.trim();
+  if (!url) return;
+  const img = new Image();
+  img.crossOrigin = "anonymous";
+  img.onload = () => { bgImage = img; statusEl.textContent = "Background dimuat."; };
+  img.onerror = () => { statusEl.textContent = "Gagal memuat background (cek URL / CORS)."; };
+  img.src = url;
+};
+document.getElementById("renderBg").onchange = (e) => {
+  renderBackground = e.target.checked;
+};
+
+// ============================================================
+// EXPORT: WebM (rekam canvas langsung via MediaRecorder)
+// ============================================================
+document.getElementById("exportWebm").onclick = async () => {
+  const fps = parseInt(document.getElementById("fpsRange").value);
+  const duration = parseInt(document.getElementById("durRange").value);
+  const btn = document.getElementById("exportWebm");
+  btn.disabled = true;
+  statusEl.textContent = "Merekam WebM...";
+
+  const stream = canvas.captureStream(fps);
+  const recorder = new MediaRecorder(stream, { mimeType: "video/webm;codecs=vp9" });
+  const chunks = [];
+  recorder.ondataavailable = (e) => { if (e.data.size > 0) chunks.push(e.data); };
+  recorder.onstop = () => {
+    const blob = new Blob(chunks, { type: "video/webm" });
+    downloadBlob(blob, ASSET_BASE + ".webm");
+    btn.disabled = false;
+    statusEl.textContent = "WebM selesai diunduh.";
+  };
+
+  recorder.start();
+  await sleep(duration * 1000);
+  recorder.stop();
+};
+
+// ============================================================
+// EXPORT: GIF (capture frame satu-satu lalu encode)
+// ============================================================
+document.getElementById("exportGif").onclick = async () => {
+  const fps = parseInt(document.getElementById("fpsRange").value);
+  const duration = parseInt(document.getElementById("durRange").value);
+  const quality = parseInt(document.getElementById("qRange").value);
+  const totalFrames = fps * duration;
+  const btn = document.getElementById("exportGif");
+  btn.disabled = true;
+
+  const progressWrap = document.getElementById("progressWrap");
+  const progressFill = document.getElementById("progressFill");
+  progressWrap.style.display = "block";
+
+  const gif = new GIF({
+    workers: 2,
+    quality: quality,
+    width: canvas.width,
+    height: canvas.height,
+    workerScript: "https://cdn.jsdelivr.net/npm/gif.js.optimized@1.0.1/dist/gif.worker.js",
+    transparent: renderBackground ? null : "0x000000"
+  });
+
+  statusEl.textContent = "Mengambil frame 0/" + totalFrames;
+
+  for (let i = 0; i < totalFrames; i++) {
+    gif.addFrame(canvas, { copy: true, delay: 1000 / fps });
+    statusEl.textContent = "Mengambil frame " + (i + 1) + "/" + totalFrames;
+    progressFill.style.width = ((i + 1) / totalFrames * 50) + "%";
+    await sleep(1000 / fps);
+  }
+
+  gif.on("progress", (p) => {
+    progressFill.style.width = (50 + p * 50) + "%";
+  });
+  gif.on("finished", (blob) => {
+    downloadBlob(blob, ASSET_BASE + ".gif");
+    btn.disabled = false;
+    statusEl.textContent = "GIF selesai diunduh.";
+    progressWrap.style.display = "none";
+    progressFill.style.width = "0%";
+  });
+
+  statusEl.textContent = "Encoding GIF...";
+  gif.render();
+};
+
+// ============================================================
+// HELPERS
+// ============================================================
+function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+function downloadBlob(blob, filename) {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url; a.download = filename;
+  document.body.appendChild(a); a.click(); a.remove();
+  URL.revokeObjectURL(url);
+}
+</script>
+
+</body>
+</html>
