@@ -1,515 +1,236 @@
 <!DOCTYPE html>
-<html lang="id">
+<html>
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Spine Viewer</title>
-
-<!-- Spine WebGL runtime — dipin ke cabang 4.1.x karena file .skel diekspor dari Spine 4.1.23 -->
-<script src="https://unpkg.com/@esotericsoftware/spine-webgl@4.1.*/dist/iife/spine-webgl.js"></script>
-<!-- Untuk export GIF -->
-<script src="https://cdn.jsdelivr.net/npm/gif.js.optimized@1.0.1/dist/gif.js"></script>
-
-<style>
-  :root {
-    --bg: #14100e;
-    --panel: #1c1815;
-    --accent: #e07a3f;
-    --text: #ecdfd2;
-    --border: #3a322c;
-  }
-  * { box-sizing: border-box; }
-  html, body {
-    margin: 0; padding: 0; height: 100%;
-    background: var(--bg); color: var(--text);
-    font-family: 'Georgia', serif;
-    overflow: hidden;
-  }
-  #stage {
-    position: relative; width: 100%; height: 100%;
-  }
-  #canvas {
-    width: 100%; height: 100%; display: block;
-    touch-action: none; cursor: grab;
-  }
-  #canvas:active { cursor: grabbing; }
-
-  #toggleBtn {
-    position: absolute; top: 12px; right: 12px; z-index: 20;
-    background: var(--panel); border: 1px solid var(--accent);
-    color: var(--text); border-radius: 8px; padding: 8px 14px;
-    cursor: pointer; font-family: inherit;
-  }
-
-  #panel {
-    position: absolute; top: 0; right: 0; height: 100%;
-    width: 320px; max-width: 90vw;
-    background: rgba(20, 16, 14, 0.97);
-    border-left: 1px solid var(--border);
-    padding: 20px 16px; overflow-y: auto;
-    transform: translateX(0);
-    transition: transform 0.25s ease;
-    z-index: 10;
-  }
-  #panel.hidden { transform: translateX(105%); }
-
-  #panel h3 {
-    margin: 18px 0 8px; font-size: 14px; letter-spacing: 1px;
-    color: var(--accent); text-transform: uppercase; border-bottom: 1px solid var(--border);
-    padding-bottom: 6px;
-  }
-  #panel h3:first-child { margin-top: 0; }
-
-  select, input[type="text"], input[type="number"] {
-    width: 100%; background: var(--panel); color: var(--text);
-    border: 1px solid var(--border); border-radius: 6px; padding: 8px;
-    font-family: inherit; margin-bottom: 8px;
-  }
-
-  .btn {
-    width: 100%; background: transparent; color: var(--text);
-    border: 1px solid var(--accent); border-radius: 6px; padding: 10px;
-    cursor: pointer; font-family: inherit; margin-bottom: 8px;
-    transition: background 0.15s;
-  }
-  .btn:hover { background: rgba(224,122,63,0.15); }
-  .btn:disabled { opacity: 0.4; cursor: not-allowed; }
-
-  .row { display: flex; gap: 8px; }
-  .row > * { flex: 1; }
-
-  .switch-row {
-    display: flex; align-items: center; gap: 10px; margin-bottom: 10px;
-  }
-  .switch-row label { font-size: 13px; }
-
-  .slider-label {
-    display: flex; justify-content: space-between; font-size: 12px;
-    margin-bottom: 4px; color: #b5a89a;
-  }
-  input[type="range"] { width: 100%; margin-bottom: 12px; accent-color: var(--accent); }
-
-  #status {
-    font-size: 12px; color: #b5a89a; margin-top: 10px; min-height: 18px;
-  }
-
-  #progressWrap {
-    display: none; margin-top: 10px;
-  }
-  #progressBar {
-    height: 6px; background: var(--panel); border-radius: 4px; overflow: hidden;
-    border: 1px solid var(--border);
-  }
-  #progressFill {
-    height: 100%; width: 0%; background: var(--accent); transition: width 0.1s;
-  }
-</style>
+    <meta charset="UTF-8">
+    <title>Spine Viewer</title>
+    <!-- Dipin PERSIS ke 4.1.23, sesuai versi asli file .skel -->
+    <script src="https://unpkg.com/@esotericsoftware/spine-player@4.1.23/dist/iife/spine-player.min.js"></script>
+    <link rel="stylesheet" href="https://unpkg.com/@esotericsoftware/spine-player@4.1.23/dist/spine-player.min.css">
+    <style>
+        body { margin: 0; background: #222; font-family: sans-serif; }
+        #player { width: 100vw; height: 100vh; }
+        #status {
+            position: absolute; top: 70px; left: 20px; z-index: 10;
+            color: #fff; background: rgba(0,0,0,0.6);
+            padding: 8px 12px; font-size: 12px; font-family: monospace;
+            max-width: 90vw; white-space: pre-wrap; max-height: 60vh; overflow-y: auto;
+        }
+        #controls {
+            position: absolute; top: 20px; left: 20px; z-index: 10;
+            display: flex; gap: 8px; align-items: center;
+        }
+        #controls button, #controls input {
+            padding: 8px 12px; font-size: 14px; border-radius: 6px; border: 1px solid #888;
+            background: #333; color: #fff;
+        }
+    </style>
 </head>
 <body>
+<div id="player"></div>
 
-<div id="stage">
-  <canvas id="canvas"></canvas>
-  <button id="toggleBtn">☰ Panel</button>
-
-  <div id="panel">
-    <h3>Model</h3>
-    <select id="skinSelect"></select>
-    <select id="animSelect"></select>
-
-    <div class="row">
-      <button class="btn" id="playPauseBtn">Pause</button>
-      <button class="btn" id="resetBtn">Reset</button>
-    </div>
-
-    <h3>Background</h3>
-    <div class="switch-row">
-      <input type="checkbox" id="renderBg">
-      <label for="renderBg">Render Background</label>
-    </div>
-    <input type="text" id="bgUrl" placeholder="https://... (URL gambar background)">
-    <button class="btn" id="loadBgBtn">Load Background</button>
-
-    <h3>Export</h3>
-    <div class="slider-label"><span>Frame Rate</span><span id="fpsVal">30</span></div>
-    <input type="range" id="fpsRange" min="10" max="60" value="30">
-
-    <div class="slider-label"><span>Durasi (detik)</span><span id="durVal">3</span></div>
-    <input type="range" id="durRange" min="1" max="15" value="3">
-
-    <div class="slider-label"><span>Quality (GIF, lebih kecil = lebih baik)</span><span id="qVal">10</span></div>
-    <input type="range" id="qRange" min="1" max="20" value="10">
-
-    <div class="row">
-      <button class="btn" id="exportGif">Export GIF</button>
-      <button class="btn" id="exportWebm">Export WebM</button>
-    </div>
-
-    <div id="progressWrap">
-      <div id="progressBar"><div id="progressFill"></div></div>
-    </div>
-
-    <div id="status">Memuat aset...</div>
-  </div>
+<div id="controls">
+    <button onclick="recordSpine()">Record</button>
+    <input type="number" id="durationInput" value="3" min="1" max="15" style="width:50px" title="Durasi (detik)">
+    <span style="color:#fff">detik</span>
 </div>
+
+<div id="status"></div>
 
 <script>
 // ============================================================
-// KONFIGURASI — ganti sesuai nama file asetmu
+// KONFIGURASI — sesuaikan dengan nama file di repo kamu
 // ============================================================
-const ASSET_NAME = "1505";              // nama dasar (dipakai untuk .skel — selalu tanpa HD)
-const USE_HD = true;                     // true = pakai 1505HD.atlas/.webp, false = pakai 1505.atlas/.webp
-const ASSET_BASE = USE_HD ? ASSET_NAME + "HD" : ASSET_NAME;  // dipakai untuk .atlas & .webp
-const SKEL_PATH = ASSET_NAME + ".skel";  // skel selalu satu, dipakai bareng SD maupun HD
+const ASSET_NAME = "1505";          // dipakai untuk .skel (selalu tanpa HD)
+const USE_HD = true;                // true = 1505HD.atlas/.webp, false = 1505.atlas/.webp
+const ATLAS_BASE = USE_HD ? ASSET_NAME + "HD" : ASSET_NAME;
+const SKEL_PATH = ASSET_NAME + ".skel";
+const ATLAS_PATH = ATLAS_BASE + ".atlas";
 
 // ============================================================
-// SETUP CANVAS + SPINE
+// fix-webm-duration disematkan langsung (dari yusitnikov/fix-webm-duration, diringkas)
 // ============================================================
-const canvas = document.getElementById("canvas");
-function resizeCanvas() {
-  canvas.width = canvas.clientWidth * devicePixelRatio;
-  canvas.height = canvas.clientHeight * devicePixelRatio;
+function ysFixWebmDuration(blob, duration, callback) {
+    var reader = new FileReader();
+    reader.onload = function() {
+        var buffer = new Uint8Array(reader.result);
+        var fixed = fixWebmBuffer(buffer, duration);
+        var fixedBlob = new Blob([fixed], { type: blob.type });
+        callback(fixedBlob);
+    };
+    reader.readAsArrayBuffer(blob);
 }
-window.addEventListener("resize", resizeCanvas);
-resizeCanvas();
+function fixWebmBuffer(buffer, duration) {
+    var doubleToString = function(num) {
+        var buf = new ArrayBuffer(8);
+        new DataView(buf).setFloat64(0, num);
+        return Array.from(new Uint8Array(buf)).map(b => String.fromCharCode(b)).join('');
+    };
+    var bufferStr = Array.from(buffer).map(b => String.fromCharCode(b)).join('');
+    var durationIndex = bufferStr.indexOf('\x44\x89');
+    if (durationIndex < 0) return buffer;
+    var durationStr = doubleToString(duration);
+    var out = new Uint8Array(buffer);
+    var writeAt = durationIndex + 3;
+    for (var i = 0; i < 8; i++) out[writeAt + i] = durationStr.charCodeAt(i);
+    return out;
+}
 
-const gl = canvas.getContext("webgl", { alpha: true, premultipliedAlpha: true }) ||
-           canvas.getContext("experimental-webgl", { alpha: true, premultipliedAlpha: true });
-
-const shader = spine.webgl.Shader.newTwoColoredTextured(gl);
-const batcher = new spine.webgl.PolygonBatcher(gl);
-const mvp = new spine.webgl.Matrix4();
-const skeletonRenderer = new spine.webgl.SkeletonRenderer(gl);
-
-let bgImage = null;
-let renderBackground = false;
+const statusEl = document.getElementById("status");
+function log(msg) { statusEl.textContent += msg + "\n"; console.log(msg); }
 
 // ============================================================
 // KONVERTER ATLAS KUSTOM → FORMAT STANDAR SPINE
-// Format asli file kamu pakai "bounds:" dan "offsets:" (bukan xy/size/orig/offset
-// standar Spine), jadi harus diterjemahkan dulu sebelum diserahkan ke parser resmi.
+// File .atlas kamu pakai "bounds:" / "offsets:" (bukan xy/size/orig/offset
+// standar), jadi diterjemahkan dulu sebelum diserahkan ke SpinePlayer.
 // ============================================================
 function convertCustomAtlas(text) {
-  const lines = text.split(/\r?\n/).map(l => l.trim()).filter(l => l.length > 0);
-  let i = 0;
-  const pageName = lines[i++];
-  const size = lines[i++].split(":")[1].split(",").map(s => s.trim());
-  const filter = lines[i++].split(":")[1].split(",").map(s => s.trim());
-  if (lines[i] && lines[i].toLowerCase().startsWith("scale:")) i++; // field non-standar, dilewati
+    const lines = text.split(/\r?\n/).map(l => l.trim()).filter(l => l.length > 0);
+    let i = 0;
+    const pageName = lines[i++];
+    const size = lines[i++].split(":")[1].split(",").map(s => s.trim());
+    const filter = lines[i++].split(":")[1].split(",").map(s => s.trim());
+    if (lines[i] && lines[i].toLowerCase().startsWith("scale:")) i++;
 
-  let out = pageName + "\n";
-  out += "size: " + size[0] + "," + size[1] + "\n";
-  out += "format: RGBA8888\n";
-  out += "filter: " + filter[0] + "," + filter[1] + "\n";
-  out += "repeat: none\n";
+    let out = pageName + "\n";
+    out += "size: " + size[0] + "," + size[1] + "\n";
+    out += "format: RGBA8888\n";
+    out += "filter: " + filter[0] + "," + filter[1] + "\n";
+    out += "repeat: none\n";
 
-  while (i < lines.length) {
-    const name = lines[i++];
-    if (!lines[i] || !lines[i].toLowerCase().startsWith("bounds:")) continue; // lewati baris ganjil
-    const b = lines[i++].split(":")[1].split(",").map(Number);
-    const o = lines[i] && lines[i].toLowerCase().startsWith("offsets:")
-      ? lines[i++].split(":")[1].split(",").map(Number)
-      : [0, 0, b[2], b[3]];
-    let rotate = false;
-    if (lines[i] && lines[i].toLowerCase().startsWith("rotate:")) { rotate = true; i++; }
+    let count = 0;
+    while (i < lines.length) {
+        const name = lines[i++];
+        if (!lines[i] || !lines[i].toLowerCase().startsWith("bounds:")) continue;
+        const b = lines[i++].split(":")[1].split(",").map(Number);
+        const o = lines[i] && lines[i].toLowerCase().startsWith("offsets:")
+            ? lines[i++].split(":")[1].split(",").map(Number)
+            : [0, 0, b[2], b[3]];
+        let rotate = false;
+        if (lines[i] && lines[i].toLowerCase().startsWith("rotate:")) { rotate = true; i++; }
 
-    out += name + "\n";
-    out += "  rotate: " + rotate + "\n";
-    out += "  xy: " + b[0] + ", " + b[1] + "\n";
-    out += "  size: " + b[2] + ", " + b[3] + "\n";
-    out += "  orig: " + o[2] + ", " + o[3] + "\n";
-    out += "  offset: " + o[0] + ", " + o[1] + "\n";
-    out += "  index: -1\n";
-  }
-  return out;
+        out += name + "\n";
+        out += "  rotate: " + rotate + "\n";
+        out += "  xy: " + b[0] + ", " + b[1] + "\n";
+        out += "  size: " + b[2] + ", " + b[3] + "\n";
+        out += "  orig: " + o[2] + ", " + o[3] + "\n";
+        out += "  offset: " + o[0] + ", " + o[1] + "\n";
+        out += "  index: -1\n";
+        count++;
+    }
+    log("Atlas dikonversi: " + count + " region ditemukan.");
+    return out;
 }
 
-let bgImage = null;
-let renderBackground = false;
-let skeleton, animationState, bounds;
-let playing = true;
-let lastFrameTime = Date.now() / 1000;
-let initFailed = false;
-let ready = false;
-
-const statusEl = document.getElementById("status");
+function textToDataURI(text, mime) {
+    // encode UTF-8 aman (nama region bisa berisi karakter Mandarin)
+    const bytes = new TextEncoder().encode(text);
+    let binary = "";
+    bytes.forEach(b => binary += String.fromCharCode(b));
+    return "data:" + mime + ";base64," + btoa(binary);
+}
 
 // ============================================================
-// PROSES LOADING: fetch manual (bukan lewat assetManager.loadTextureAtlas,
-// karena parser bawaan tidak paham format atlas kustom ini)
+// AMBIL & KONVERSI ATLAS DULU, BARU BUAT SPINEPLAYER
 // ============================================================
-async function loadEverything() {
-  try {
-    statusEl.textContent = "Mengunduh file...";
+log("Mengunduh " + ATLAS_PATH + "...");
 
-    const [atlasRaw, skelBuffer] = await Promise.all([
-      fetch(ASSET_BASE + ".atlas", { cache: "no-store" }).then(r => {
-        if (!r.ok) throw new Error(ASSET_BASE + ".atlas → HTTP " + r.status);
+fetch(ATLAS_PATH, { cache: "no-store" })
+    .then(r => {
+        if (!r.ok) throw new Error(ATLAS_PATH + " → HTTP " + r.status);
         return r.text();
-      }),
-      fetch(SKEL_PATH, { cache: "no-store" }).then(r => {
-        if (!r.ok) throw new Error(SKEL_PATH + " → HTTP " + r.status);
-        return r.arrayBuffer();
-      })
-    ]);
+    })
+    .then(rawAtlasText => {
+        const convertedAtlas = convertCustomAtlas(rawAtlasText);
+        const atlasDataURI = textToDataURI(convertedAtlas, "application/octet-stream");
 
-    statusEl.textContent = "Memuat tekstur...";
-    const textureImage = await new Promise((resolve, reject) => {
-      const img = new Image();
-      img.crossOrigin = "anonymous";
-      img.onload = () => resolve(img);
-      img.onerror = () => reject(new Error(ASSET_BASE + ".webp gagal dimuat (404 / CORS)"));
-      img.src = ASSET_BASE + ".webp";
+        log("Membuat SpinePlayer (skel: " + SKEL_PATH + ", atlas: " + ATLAS_PATH + ")...");
+
+        const player = new spine.SpinePlayer("player", {
+            binaryUrl: SKEL_PATH,
+            atlasUrl: ATLAS_PATH,
+            rawDataURIs: {
+                [ATLAS_PATH]: atlasDataURI   // timpa isi .atlas dengan versi yang sudah dikonversi
+                // catatan: file .webp TIDAK ditimpa di sini — biarkan SpinePlayer fetch normal
+                // dari folder yang sama dengan ATLAS_PATH (nama file webp harus PERSIS sama
+                // dengan nama page di baris pertama file .atlas, mis. "1505HD.webp")
+            },
+            showControls: true,
+            alpha: true,
+            backgroundColor: "00000000",
+            premultipliedAlpha: false,
+            preserveDrawingBuffer: true,
+            success: function(player) {
+                log("Spine dimuat. Animasi tersedia: " + player.skeleton.data.animations.map(a => a.name).join(", "));
+                const canvas = player.dom.querySelector("canvas");
+                canvas.addEventListener("webglcontextlost", () => {
+                    log("PERINGATAN: WebGL context hilang (beban terlalu berat).");
+                });
+
+                window.recordSpine = function() {
+                    statusEl.textContent = "";
+                    const durationSec = parseFloat(document.getElementById("durationInput").value) || 3;
+                    log("Merekam " + durationSec + " detik...");
+
+                    let rect = canvas.getBoundingClientRect();
+                    let recordCanvas = document.createElement("canvas");
+                    let maxSide = 2048;
+                    let scale = maxSide / Math.max(rect.width, rect.height);
+                    recordCanvas.width = Math.round(rect.width * scale);
+                    recordCanvas.height = Math.round(rect.height * scale);
+                    let rctx = recordCanvas.getContext("2d");
+                    rctx.imageSmoothingEnabled = true;
+                    rctx.imageSmoothingQuality = "high";
+
+                    let drawInterval = setInterval(() => {
+                        rctx.clearRect(0, 0, recordCanvas.width, recordCanvas.height);
+                        rctx.drawImage(canvas, 0, 0, recordCanvas.width, recordCanvas.height);
+                    }, 1000 / 24);
+
+                    let stream = recordCanvas.captureStream(24);
+                    let recorder = new MediaRecorder(stream, {
+                        mimeType: "video/webm;codecs=vp8",
+                        videoBitsPerSecond: 12000000
+                    });
+                    let chunks = [];
+                    let startTime = Date.now();
+
+                    recorder.ondataavailable = e => {
+                        if (e.data.size > 0) {
+                            chunks.push(e.data);
+                            log("chunk " + chunks.length + ": +" + (e.data.size / 1024).toFixed(1) + " KB");
+                        }
+                    };
+
+                    recorder.onstop = () => {
+                        clearInterval(drawInterval);
+                        let duration = Date.now() - startTime;
+                        let buggyBlob = new Blob(chunks, { type: "video/webm" });
+                        log("Ukuran video: " + (buggyBlob.size / 1024 / 1024).toFixed(2) + " MB");
+
+                        ysFixWebmDuration(buggyBlob, duration, function(fixedBlob) {
+                            log("Selesai, ukuran akhir: " + (fixedBlob.size / 1024 / 1024).toFixed(2) + " MB");
+                            let url = URL.createObjectURL(fixedBlob);
+                            let a = document.createElement("a");
+                            a.href = url;
+                            a.download = ATLAS_BASE + "-animation.webm";
+                            a.click();
+                            log("Download dimulai.");
+                        });
+                    };
+
+                    recorder.start(1000);
+                    setTimeout(() => recorder.stop(), durationSec * 1000);
+                };
+            },
+            error: function(player, error) {
+                log("ERROR SPINE: " + error);
+            }
+        });
+    })
+    .catch(e => {
+        log("GAGAL: " + (e.message || e));
+        console.error(e);
     });
-
-    statusEl.textContent = "Mem-parsing atlas...";
-    const standardAtlasText = convertCustomAtlas(atlasRaw);
-    const glTexture = new spine.webgl.GLTexture(gl, textureImage);
-    const atlas = new spine.TextureAtlas(standardAtlasText, () => glTexture);
-
-    statusEl.textContent = "Mem-parsing skeleton...";
-    const atlasLoader = new spine.AtlasAttachmentLoader(atlas);
-    const skeletonBinary = new spine.SkeletonBinary(atlasLoader);
-    const skeletonData = skeletonBinary.readSkeletonData(new Uint8Array(skelBuffer));
-
-    skeleton = new spine.Skeleton(skeletonData);
-    bounds = calculateBounds(skeleton);
-    skeleton.x = 0;
-    skeleton.y = 0;
-
-    const animStateData = new spine.AnimationStateData(skeleton.data);
-    animationState = new spine.AnimationState(animStateData);
-
-    const skinSelect = document.getElementById("skinSelect");
-    skeletonData.skins.forEach(s => {
-      const opt = document.createElement("option");
-      opt.value = s.name; opt.textContent = s.name;
-      skinSelect.appendChild(opt);
-    });
-    skinSelect.onchange = () => {
-      skeleton.setSkinByName(skinSelect.value);
-      skeleton.setSlotsToSetupPose();
-    };
-
-    const animSelect = document.getElementById("animSelect");
-    skeletonData.animations.forEach(a => {
-      const opt = document.createElement("option");
-      opt.value = a.name; opt.textContent = a.name;
-      animSelect.appendChild(opt);
-    });
-    animSelect.onchange = () => {
-      animationState.setAnimation(0, animSelect.value, true);
-    };
-
-    if (skeletonData.animations.length > 0) {
-      animationState.setAnimation(0, skeletonData.animations[0].name, true);
-      animSelect.value = skeletonData.animations[0].name;
-    }
-    if (skeletonData.skins.length > 0) {
-      skeleton.setSkinByName(skeletonData.skins[0].name);
-    }
-
-    statusEl.textContent = "Siap. " + skeletonData.animations.length + " animasi, " +
-      skeletonData.skins.length + " skin ditemukan.";
-    ready = true;
-    lastFrameTime = Date.now() / 1000;
-
-  } catch (e) {
-    initFailed = true;
-    statusEl.innerHTML = "<b style='color:#e07a3f'>GAGAL:</b><br>" + (e.message || e) +
-      "<br><small>" + (e.stack ? e.stack.split("\n").slice(0, 4).join("<br>") : "") + "</small>";
-    console.error(e);
-  }
-}
-
-loadEverything();
-
-function loop() {
-  requestAnimationFrame(loop);
-  if (initFailed || !ready) return;
-
-  try {
-    const now = Date.now() / 1000;
-    const delta = now - lastFrameTime;
-    lastFrameTime = now;
-
-    if (playing) {
-      animationState.update(delta);
-      animationState.apply(skeleton);
-    }
-    skeleton.updateWorldTransform();
-    render();
-  } catch (e) {
-    initFailed = true;
-    statusEl.innerHTML = "<b style='color:#e07a3f'>ERROR RENDER:</b><br>" + (e.message || e) +
-      "<br><small>" + (e.stack ? e.stack.split("\n").slice(0, 4).join("<br>") : "") + "</small>";
-    console.error(e);
-  }
-}
-
-function calculateBounds(skeleton) {
-  skeleton.setToSetupPose();
-  skeleton.updateWorldTransform();
-  const offset = new spine.Vector2();
-  const size = new spine.Vector2();
-  skeleton.getBounds(offset, size, []);
-  return { offset, size };
-}
-
-function render() {
-  resizeCanvas();
-  gl.clearColor(0, 0, 0, 0);
-  gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
-  gl.viewport(0, 0, canvas.width, canvas.height);
-
-  const centerX = bounds.offset.x + bounds.size.x / 2;
-  const centerY = bounds.offset.y + bounds.size.y / 2;
-  const scale = Math.max(bounds.size.x / canvas.width, bounds.size.y / canvas.height) * 1.3;
-
-  mvp.ortho2d(centerX - canvas.width * scale / 2, centerY - canvas.height * scale / 2,
-              canvas.width * scale, canvas.height * scale);
-
-  shader.bind();
-  shader.setUniformi(spine.webgl.Shader.SAMPLER, 0);
-  shader.setUniform4x4f(spine.webgl.Shader.MVP_MATRIX, mvp.values);
-
-  batcher.begin(shader);
-  skeletonRenderer.premultipliedAlpha = true;
-  skeletonRenderer.draw(batcher, skeleton);
-  batcher.end();
-
-  shader.unbind();
-}
-
-loop();
-
-// ============================================================
-// UI CONTROLS
-// ============================================================
-document.getElementById("toggleBtn").onclick = () => {
-  document.getElementById("panel").classList.toggle("hidden");
-};
-
-document.getElementById("playPauseBtn").onclick = (e) => {
-  playing = !playing;
-  e.target.textContent = playing ? "Pause" : "Play";
-};
-
-document.getElementById("resetBtn").onclick = () => {
-  if (skeleton && animationState) {
-    const animSelect = document.getElementById("animSelect");
-    animationState.setAnimation(0, animSelect.value, true);
-  }
-};
-
-document.getElementById("fpsRange").oninput = (e) => {
-  document.getElementById("fpsVal").textContent = e.target.value;
-};
-document.getElementById("durRange").oninput = (e) => {
-  document.getElementById("durVal").textContent = e.target.value;
-};
-document.getElementById("qRange").oninput = (e) => {
-  document.getElementById("qVal").textContent = e.target.value;
-};
-
-document.getElementById("loadBgBtn").onclick = () => {
-  const url = document.getElementById("bgUrl").value.trim();
-  if (!url) return;
-  const img = new Image();
-  img.crossOrigin = "anonymous";
-  img.onload = () => { bgImage = img; statusEl.textContent = "Background dimuat."; };
-  img.onerror = () => { statusEl.textContent = "Gagal memuat background (cek URL / CORS)."; };
-  img.src = url;
-};
-document.getElementById("renderBg").onchange = (e) => {
-  renderBackground = e.target.checked;
-};
-
-// ============================================================
-// EXPORT: WebM (rekam canvas langsung via MediaRecorder)
-// ============================================================
-document.getElementById("exportWebm").onclick = async () => {
-  const fps = parseInt(document.getElementById("fpsRange").value);
-  const duration = parseInt(document.getElementById("durRange").value);
-  const btn = document.getElementById("exportWebm");
-  btn.disabled = true;
-  statusEl.textContent = "Merekam WebM...";
-
-  const stream = canvas.captureStream(fps);
-  const recorder = new MediaRecorder(stream, { mimeType: "video/webm;codecs=vp9" });
-  const chunks = [];
-  recorder.ondataavailable = (e) => { if (e.data.size > 0) chunks.push(e.data); };
-  recorder.onstop = () => {
-    const blob = new Blob(chunks, { type: "video/webm" });
-    downloadBlob(blob, ASSET_BASE + ".webm");
-    btn.disabled = false;
-    statusEl.textContent = "WebM selesai diunduh.";
-  };
-
-  recorder.start();
-  await sleep(duration * 1000);
-  recorder.stop();
-};
-
-// ============================================================
-// EXPORT: GIF (capture frame satu-satu lalu encode)
-// ============================================================
-document.getElementById("exportGif").onclick = async () => {
-  const fps = parseInt(document.getElementById("fpsRange").value);
-  const duration = parseInt(document.getElementById("durRange").value);
-  const quality = parseInt(document.getElementById("qRange").value);
-  const totalFrames = fps * duration;
-  const btn = document.getElementById("exportGif");
-  btn.disabled = true;
-
-  const progressWrap = document.getElementById("progressWrap");
-  const progressFill = document.getElementById("progressFill");
-  progressWrap.style.display = "block";
-
-  const gif = new GIF({
-    workers: 2,
-    quality: quality,
-    width: canvas.width,
-    height: canvas.height,
-    workerScript: "https://cdn.jsdelivr.net/npm/gif.js.optimized@1.0.1/dist/gif.worker.js",
-    transparent: renderBackground ? null : "0x000000"
-  });
-
-  statusEl.textContent = "Mengambil frame 0/" + totalFrames;
-
-  for (let i = 0; i < totalFrames; i++) {
-    gif.addFrame(canvas, { copy: true, delay: 1000 / fps });
-    statusEl.textContent = "Mengambil frame " + (i + 1) + "/" + totalFrames;
-    progressFill.style.width = ((i + 1) / totalFrames * 50) + "%";
-    await sleep(1000 / fps);
-  }
-
-  gif.on("progress", (p) => {
-    progressFill.style.width = (50 + p * 50) + "%";
-  });
-  gif.on("finished", (blob) => {
-    downloadBlob(blob, ASSET_BASE + ".gif");
-    btn.disabled = false;
-    statusEl.textContent = "GIF selesai diunduh.";
-    progressWrap.style.display = "none";
-    progressFill.style.width = "0%";
-  });
-
-  statusEl.textContent = "Encoding GIF...";
-  gif.render();
-};
-
-// ============================================================
-// HELPERS
-// ============================================================
-function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
-function downloadBlob(blob, filename) {
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url; a.download = filename;
-  document.body.appendChild(a); a.click(); a.remove();
-  URL.revokeObjectURL(url);
-}
 </script>
-
 </body>
 </html>
