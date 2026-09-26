@@ -193,23 +193,55 @@ let lastFrameTime = Date.now() / 1000;
 
 const statusEl = document.getElementById("status");
 
+let initFailed = false;
+let loadStartTime = Date.now();
+
 function loop() {
   requestAnimationFrame(loop);
-  if (!assetManager.isLoadingComplete()) return;
+  if (initFailed) return;
 
-  if (!skeleton) init();
+  if (!assetManager.isLoadingComplete()) {
+    // tampilkan progress loading & cek error dari asset manager
+    const errs = assetManager.getErrors ? assetManager.getErrors() : {};
+    if (errs && Object.keys(errs).length > 0) {
+      initFailed = true;
+      statusEl.innerHTML = "<b>GAGAL MEMUAT ASET:</b><br>" +
+        Object.entries(errs).map(([k, v]) => k + " → " + v).join("<br>");
+      return;
+    }
+    const elapsed = ((Date.now() - loadStartTime) / 1000).toFixed(0);
+    statusEl.textContent = "Memuat aset... (" + elapsed + "s)";
+    return;
+  }
+
+  if (!skeleton) {
+    try {
+      init();
+    } catch (e) {
+      initFailed = true;
+      statusEl.innerHTML = "<b>GAGAL INIT (kemungkinan versi runtime tidak cocok):</b><br>" +
+        (e.message || e);
+      console.error(e);
+      return;
+    }
+  }
 
   const now = Date.now() / 1000;
   const delta = now - lastFrameTime;
   lastFrameTime = now;
 
-  if (playing) {
-    animationState.update(delta);
-    animationState.apply(skeleton);
+  try {
+    if (playing) {
+      animationState.update(delta);
+      animationState.apply(skeleton);
+    }
+    skeleton.updateWorldTransform();
+    render();
+  } catch (e) {
+    initFailed = true;
+    statusEl.innerHTML = "<b>GAGAL RENDER:</b><br>" + (e.message || e);
+    console.error(e);
   }
-  skeleton.updateWorldTransform();
-
-  render();
 }
 
 function init() {
