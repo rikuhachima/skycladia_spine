@@ -1,0 +1,744 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Spine Viewer &amp; WebM Exporter</title>
+<style>
+:root{
+  --bg:#12100e; --panel:#1c1916; --line:#332e28; --ink:#f2ece2; --sub:#a89c8c;
+  --accent:#e2793d; --accent2:#7fa88a; --mono:'JetBrains Mono',ui-monospace,Menlo,monospace;
+  box-sizing:border-box;
+  padding-top:env(safe-area-inset-top,0px); padding-bottom:env(safe-area-inset-bottom,0px);
+}
+*{box-sizing:border-box}
+html{height:100%;scroll-padding-top:env(safe-area-inset-top,0px)}
+body{
+  height:100%;margin:0;background:var(--bg);color:var(--ink);
+  font-family:ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
+  display:flex;flex-direction:column;
+}
+header{padding:16px 18px 10px;border-bottom:1px solid var(--line)}
+h1{margin:0;font-size:1.05rem;font-weight:600;letter-spacing:.01em}
+p.sub{margin:4px 0 0;color:var(--sub);font-size:.82rem;line-height:1.4}
+main{flex:1;display:flex;flex-direction:column;gap:14px;padding:14px 14px 22px;overflow-y:auto}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:14px}
+.panel h2{margin:0 0 10px;font-size:.78rem;text-transform:uppercase;letter-spacing:.08em;color:var(--accent2);font-weight:600}
+label{display:block;font-size:.78rem;color:var(--sub);margin:10px 0 4px}
+label:first-child{margin-top:0}
+input[type=file]{position:absolute;width:1px;height:1px;opacity:0;overflow:hidden}
+.filebtn{
+  display:block;width:100%;background:#141210;border:1px dashed var(--line);border-radius:8px;
+  padding:12px 10px;font-size:.8rem;color:var(--sub);text-align:center;cursor:pointer;
+}
+.filebtn.has-file{border-style:solid;border-color:var(--accent2);color:var(--ink)}
+select,input[type=number],input[type=range]{
+  width:100%;background:#141210;color:var(--ink);border:1px solid var(--line);
+  border-radius:6px;padding:7px 8px;font-size:.85rem;
+}
+.row{display:flex;gap:10px}
+.row>div{flex:1}
+.btn{
+  appearance:none;border:1px solid var(--accent);background:transparent;color:var(--accent);
+  border-radius:7px;padding:9px 14px;font-size:.85rem;font-weight:600;cursor:pointer;
+}
+.btn:active{background:var(--accent);color:#1a140f}
+.btn.primary{background:var(--accent);color:#1a140f}
+.bgbtn{padding:7px 10px;font-size:.75rem}
+.bgbtn.active{background:var(--accent2);border-color:var(--accent2);color:#12100e}
+.bgswatch{width:34px;height:34px;border-radius:50%;border:2px solid var(--line);padding:0;cursor:pointer}
+.bgswatch.active{border-color:var(--accent)}
+.slotrow.flash{animation:flashrow 1.6s ease}
+@keyframes flashrow{0%{background:var(--accent)}100%{background:transparent}}
+.btn.wide{width:100%;margin-top:8px}
+.btn:disabled{opacity:.4}
+.btns{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
+.canvas-wrap{
+  position:relative;background:#080706;border-radius:10px;overflow:hidden;
+  border:1px solid var(--line);
+}
+canvas{display:block;width:100%;height:auto;aspect-ratio:4/5;touch-action:none}
+.toggle{display:flex;align-items:center;gap:8px;font-size:.8rem;color:var(--sub);margin-top:10px}
+.log{
+  font-family:var(--mono);font-size:.68rem;color:var(--sub);white-space:pre-wrap;
+  max-height:110px;overflow-y:auto;background:#0e0c0a;border-radius:6px;padding:8px;
+  margin-top:10px;line-height:1.5;
+}
+.hint{font-size:.72rem;color:var(--sub);margin-top:8px;line-height:1.5}
+.pill{display:inline-block;background:#241d15;color:var(--accent);border-radius:5px;padding:1px 6px;font-size:.68rem;font-family:var(--mono)}
+</style>
+</head>
+<body>
+<header>
+  <h1>Spine Viewer &amp; WebM Exporter</h1>
+  <p class="sub">Render karakter Spine (.skel + .atlas custom + texture) langsung di browser, lalu rekam jadi WebM. Format atlas ini pakai field <span class="pill">bounds/offsets</span> non-standar — dikonversi otomatis ke format Spine biasa.</p>
+</header>
+<main>
+  <div class="panel">
+    <h2>1 &middot; Muat Model</h2>
+    <label>Pilih Karakter (dari folder assets/)</label>
+    <div id="charPicker" class="btns" style="margin-top:0">
+      <span class="hint" style="margin:0">Memuat daftar karakter...</span>
+    </div>
+    <div class="hint" id="charHint" style="margin:6px 0 0"></div>
+    <div id="manualUpload" style="display:none">
+      <label style="margin-top:14px">Atau upload manual</label>
+      <label>File Atlas (.atlas / .txt)</label>
+      <label class="filebtn" id="lAtlas" for="fAtlas">Tap untuk pilih file .atlas</label>
+      <input type="file" id="fAtlas" accept=".atlas,.txt">
+      <label>File Skeleton (.skel)</label>
+      <label class="filebtn" id="lSkel" for="fSkel">Tap untuk pilih file .skel</label>
+      <input type="file" id="fSkel" accept=".skel">
+      <label>File Texture (.webp/.png/.jpg) — pilih SEMUA halaman sekaligus</label>
+      <label class="filebtn" id="lTex" for="fTex">Tap untuk pilih texture (bisa lebih dari satu)</label>
+      <input type="file" id="fTex" multiple>
+    </div>
+    <label>Resolusi Render/Export</label>
+    <select id="resSel" onchange="if(skeleton) renderModel(true, document.getElementById('animSel').value);">
+      <option value="960">720p (960x1200)</option>
+      <option value="1440" selected>1080p (1440x1800)</option>
+      <option value="1920">1440p (1920x2400)</option>
+    </select>
+    <button class="btn primary wide" id="btnLoad" disabled>Render Model</button>
+    <div class="log" id="log">Menunggu file diupload…</div>
+  </div>
+
+  <div class="panel">
+    <h2>2 &middot; Preview</h2>
+    <div class="canvas-wrap"><canvas id="c"></canvas><canvas id="ov" style="position:absolute;left:0;top:0;width:100%;height:100%;pointer-events:none;aspect-ratio:auto"></canvas></div>
+    <div class="btns" style="margin-top:8px;align-items:center">
+      <button class="btn" id="zOut" style="min-width:44px">&minus;</button>
+      <button class="btn" id="zIn" style="min-width:44px">+</button>
+      <button class="btn" id="zReset">Reset Zoom</button>
+      <span class="hint" style="margin:0">Cubit 2 jari = zoom, geser 1 jari = pindah. Ikut terekam di WebM.</span>
+    </div>
+    <div class="row" style="margin-top:10px">
+      <div>
+        <label>Animasi</label>
+        <select id="animSel" disabled></select>
+      </div>
+      <div>
+        <label>&nbsp;</label>
+        <button class="btn wide" id="btnPlay" disabled>Pause</button>
+      </div>
+    </div>
+    <label style="margin-top:12px">Sembunyikan Bagian (Slot)</label>
+    <div class="hint" style="margin:0 0 6px">Kotak kiri = tampil/sembunyi. Kotak kanan = tandai lokasi dengan kotak putih (hanya di preview, tidak ikut ter-export).</div>
+    <div class="row" style="margin-bottom:6px">
+      <div><input type="text" id="slotFilter" placeholder="Cari nama slot..." style="width:100%;background:#141210;color:var(--ink);border:1px solid var(--line);border-radius:6px;padding:7px 8px;font-size:.8rem"></div>
+      <div style="flex:0 0 110px"><input type="text" id="rangeFilter" placeholder="Nomor 1-335" style="width:100%;background:#141210;color:var(--ink);border:1px solid var(--line);border-radius:6px;padding:7px 8px;font-size:.8rem"></div>
+    </div>
+    <div class="hint" style="margin:-4px 0 6px">Kolom nomor di kanan langsung mengatur yang tampil di kanvas (bukan cuma daftar).</div>
+    <div id="slotList" style="max-height:180px;overflow-y:auto;background:#141210;border:1px solid var(--line);border-radius:8px;padding:8px;font-size:.78rem"></div>
+    <button class="btn wide" id="btnRefit" style="margin-top:8px" disabled>Sesuaikan Ulang Kamera ke Bagian Terlihat</button>
+    <label style="margin-top:12px">Background</label>
+    <div class="btns" style="margin-top:0">
+      <button class="bgswatch active" data-bg="000000" style="background:#000"></button>
+      <button class="bgswatch" data-bg="00FF00" style="background:#0f0"></button>
+      <button class="bgswatch" data-bg="0000FF" style="background:#00f"></button>
+      <button class="bgswatch" data-bg="FF0000" style="background:#f00"></button>
+      <label style="display:flex;flex-direction:column;align-items:center;gap:3px;margin:0">
+        <input type="color" id="bgCustom" value="#12100e" style="width:34px;height:34px;padding:2px;border-radius:50%;border:1px solid var(--line);background:#141210">
+        <span style="font-size:.65rem;color:var(--sub)">custom</span>
+      </label>
+    </div>
+  </div>
+
+  <div class="panel">
+    <h2>3 &middot; Export WebM</h2>
+    <div class="row">
+      <div>
+        <label>Frame Rate: <span id="fpsV">30</span></label>
+        <input type="range" id="fps" min="15" max="60" value="30">
+      </div>
+      <div>
+        <label>Durasi (detik): <span id="durV">3</span></label>
+        <input type="range" id="dur" min="1" max="15" value="3" step="0.1">
+      </div>
+    </div>
+    <div class="row" style="align-items:flex-end">
+      <div>
+        <label>Pas-kan ke jumlah loop animasi</label>
+        <select id="loopCount">
+          <option value="1">1x loop</option>
+          <option value="2">2x loop</option>
+          <option value="3">3x loop</option>
+          <option value="4">4x loop</option>
+          <option value="5">5x loop</option>
+        </select>
+      </div>
+      <div><button class="btn wide" id="btnApplyLoop" disabled>Terapkan ke Durasi</button></div>
+    </div>
+    <div class="btns">
+      <button class="btn primary" id="btnExport" disabled>Export WebM</button>
+      <span id="expStatus" class="hint"></span>
+    </div>
+  </div>
+</main>
+
+<script src="https://cdn.jsdelivr.net/npm/@esotericsoftware/spine-webgl@4.1.24/dist/iife/spine-webgl.js"></script>
+<script>
+const logEl = document.getElementById('log');
+function log(msg){ logEl.textContent += '\n'+msg; logEl.scrollTop = logEl.scrollHeight; }
+
+let atlasText=null, skelBuf=null, texFiles=[];
+const fAtlas=document.getElementById('fAtlas'), fSkel=document.getElementById('fSkel'), fTex=document.getElementById('fTex');
+const btnLoad=document.getElementById('btnLoad');
+
+fAtlas.onchange = e => { const f=e.target.files[0]; if(!f)return; const l=document.getElementById('lAtlas'); l.textContent=f.name; l.classList.add('has-file'); f.text().then(t=>{atlasText=t; log('Atlas terbaca: '+f.name);}); checkReady(); };
+fSkel.onchange = e => { const f=e.target.files[0]; if(!f)return; const l=document.getElementById('lSkel'); l.textContent=f.name; l.classList.add('has-file'); f.arrayBuffer().then(b=>{skelBuf=b; log('Skeleton terbaca: '+f.name+' ('+b.byteLength+' bytes)');}); checkReady(); };
+fTex.onchange = e => { texFiles=Array.from(e.target.files); if(!texFiles.length)return; const l=document.getElementById('lTex'); l.textContent=texFiles.length+' file: '+texFiles.map(f=>f.name).join(', '); l.classList.add('has-file'); log('Texture terbaca: '+texFiles.map(f=>f.name).join(', ')); checkReady(); };
+function checkReady(){ setTimeout(()=>{ btnLoad.disabled = !(atlasText && skelBuf && texFiles.length); }, 50); }
+
+// ---- Pemilih karakter dari folder assets/ (same-origin, selalu diizinkan) ----
+(async function initCharPicker(){
+  const picker=document.getElementById('charPicker');
+  const hint=document.getElementById('charHint');
+  try{
+    const res=await fetch('assets/characters.json');
+    if(!res.ok) throw new Error('HTTP '+res.status);
+    const chars=await res.json();
+    picker.innerHTML='';
+    Object.keys(chars).forEach(id=>{
+      const c=chars[id];
+      const b=document.createElement('button');
+      b.className='btn bgbtn'; b.textContent=c.name;
+      b.onclick=async ()=>{
+        picker.querySelectorAll('button').forEach(x=>x.classList.remove('active'));
+        b.classList.add('active');
+        hint.textContent='Memuat '+c.name+'...';
+        try{
+          const base='assets/'+id+'/';
+          const rA=await fetch(base+c.atlas); if(!rA.ok) throw new Error('Atlas HTTP '+rA.status);
+          atlasText=await rA.text();
+          document.getElementById('lAtlas').textContent=c.atlas; document.getElementById('lAtlas').classList.add('has-file');
+
+          const rS=await fetch(base+c.skel); if(!rS.ok) throw new Error('Skel HTTP '+rS.status);
+          skelBuf=await rS.arrayBuffer();
+          document.getElementById('lSkel').textContent=c.skel; document.getElementById('lSkel').classList.add('has-file');
+
+          texFiles=[];
+          for(const w of c.webp){
+            const rT=await fetch(base+w); if(!rT.ok) throw new Error('Texture HTTP '+rT.status+' ('+w+')');
+            const blob=await rT.blob();
+            texFiles.push(new File([blob], w, {type:blob.type}));
+          }
+          document.getElementById('lTex').textContent=texFiles.length+' file: '+texFiles.map(f=>f.name).join(', ');
+          document.getElementById('lTex').classList.add('has-file');
+
+          hint.textContent='Merender '+c.name+'...';
+          checkReady();
+          await renderModel();
+          hint.textContent=c.name+' siap.';
+        }catch(err){
+          hint.textContent='Gagal memuat '+c.name+': '+err.message+' (cek apakah folder assets/'+id+'/ dan file di dalamnya sudah ada & namanya sesuai characters.json).';
+        }
+      };
+      picker.appendChild(b);
+    });
+    if(!Object.keys(chars).length) hint.textContent='characters.json kosong.';
+  }catch(err){
+    picker.innerHTML='';
+    hint.textContent='Tidak bisa memuat daftar karakter (assets/characters.json). Kalau kamu buka file ini langsung dari HP/komputer tanpa di-host, ini wajar — gunakan upload manual di bawah. '+err.message;
+  }
+})();
+
+
+
+
+
+// ---- Parse custom atlas format (bounds/offsets), mendukung banyak halaman ----
+function parseCustomAtlas(text){
+  const lines = text.split(/\r?\n/).map(l=>l.trim()).filter(Boolean);
+  const pages=[]; let page=null, r=null;
+  for(let i=0;i<lines.length;i++){
+    const l=lines[i];
+    if(!l.includes(':')){
+      if(i+1<lines.length && lines[i+1].startsWith('size:')){
+        page={imageName:l,pageW:0,pageH:0,scale:1,regions:[]}; pages.push(page); r=null;
+      } else if(page){
+        r={name:l,rotate:0}; page.regions.push(r);
+      }
+      continue;
+    }
+    const idx=l.indexOf(':'), k=l.slice(0,idx), v=l.slice(idx+1);
+    if(r && (k==='bounds'||k==='offsets'||k==='rotate')){
+      if(k==='bounds') r.bounds=v.split(',').map(Number);
+      else if(k==='offsets') r.offsets=v.split(',').map(Number);
+      else r.rotate=parseFloat(v);
+    } else if(page && !r || (page && page.regions.length===0)){
+      if(k==='size'){ const q=v.split(',').map(Number); page.pageW=q[0]; page.pageH=q[1]; }
+      else if(k==='scale') page.scale=parseFloat(v);
+    }
+  }
+  pages.forEach(pg=>{ pg.regions=pg.regions.filter(x=>x.bounds); });
+  return {pages};
+}
+
+function buildStandardAtlas(parsed, applyFix){
+  let out='';
+  parsed.pages.forEach((pg,pi)=>{
+    const s = applyFix ? (1/pg.scale) : 1;
+    if(pi>0) out += "\n";
+    out += pg.imageName+"\n";
+    out += "size:"+pg.pageW+","+pg.pageH+"\n";
+    out += "filter:Linear,Linear\n";
+    for(const r of pg.regions){
+      const [bx,by,bw,bh]=r.bounds;
+      const [ox,oy,ow,oh]= r.offsets || [0,0,bw,bh];
+      out += r.name+"\n";
+      if(r.rotate) out += "  rotate: "+r.rotate+"\n";
+      out += "  xy: "+bx+", "+by+"\n";
+      out += "  size: "+bw+", "+bh+"\n";
+      out += "  orig: "+(ow*s).toFixed(2)+", "+(oh*s).toFixed(2)+"\n";
+      out += "  offset: "+(ox*s).toFixed(2)+", "+(oy*s).toFixed(2)+"\n";
+      out += "  index: -1\n";
+    }
+  });
+  return out;
+}
+
+let canvas=document.getElementById('c'), gl, renderer, skeleton, state, glTex, playing=true, lastTime=0;
+let bgColor=[0,0,0];
+const hiddenSlots = new Set();
+let animDurations={};
+const highlightSlots = new Set();
+const view={zoom:1,px:0,py:0}; let viewBase=null;
+function applyView(){
+  if(!viewBase||!renderer) return;
+  const cam=renderer.camera;
+  cam.viewportWidth=viewBase.vw/view.zoom; cam.viewportHeight=viewBase.vh/view.zoom;
+  cam.position.x=viewBase.x+view.px; cam.position.y=viewBase.y+view.py;
+}
+function zoomAt(f,cx,cy){
+  if(!viewBase) return;
+  const r=canvas.getBoundingClientRect();
+  const nx=(cx-r.left)/r.width, ny=(cy-r.top)/r.height;
+  const vw=viewBase.vw/view.zoom, vh=viewBase.vh/view.zoom;
+  const wx=viewBase.x+view.px+(nx-0.5)*vw, wy=viewBase.y+view.py+(0.5-ny)*vh;
+  view.zoom=Math.min(10,Math.max(0.3,view.zoom*f));
+  const vw2=viewBase.vw/view.zoom, vh2=viewBase.vh/view.zoom;
+  view.px=wx-(nx-0.5)*vw2-viewBase.x;
+  view.py=wy-(0.5-ny)*vh2-viewBase.y;
+}
+const ptrs=new Map(); let lastDist=0; let tapInfo=null;
+function ptrDist(){ const a=[...ptrs.values()]; return Math.hypot(a[0].x-a[1].x,a[0].y-a[1].y); }
+function ptrMid(){ const a=[...ptrs.values()]; return {x:(a[0].x+a[1].x)/2,y:(a[0].y+a[1].y)/2}; }
+canvas.addEventListener('pointerdown',e=>{
+  canvas.setPointerCapture(e.pointerId);
+  ptrs.set(e.pointerId,{x:e.clientX,y:e.clientY});
+  if(ptrs.size===1) tapInfo={id:e.pointerId,x:e.clientX,y:e.clientY,t:performance.now(),moved:false};
+  else tapInfo=null;
+  if(ptrs.size===2) lastDist=ptrDist();
+});
+canvas.addEventListener('pointermove',e=>{
+  if(!ptrs.has(e.pointerId)||!viewBase) return;
+  const prev=ptrs.get(e.pointerId);
+  ptrs.set(e.pointerId,{x:e.clientX,y:e.clientY});
+  if(tapInfo && tapInfo.id===e.pointerId && Math.hypot(e.clientX-tapInfo.x,e.clientY-tapInfo.y)>8) tapInfo.moved=true;
+  if(ptrs.size===1){
+    const r=canvas.getBoundingClientRect();
+    view.px-=(e.clientX-prev.x)/r.width*(viewBase.vw/view.zoom);
+    view.py+=(e.clientY-prev.y)/r.height*(viewBase.vh/view.zoom);
+  } else if(ptrs.size===2){
+    const d=ptrDist(), m=ptrMid();
+    if(lastDist>0) zoomAt(d/lastDist,m.x,m.y);
+    lastDist=d;
+  }
+});
+['pointerup','pointercancel'].forEach(t=>canvas.addEventListener(t,e=>{
+  if(t==='pointerup' && tapInfo && tapInfo.id===e.pointerId && !tapInfo.moved && (performance.now()-tapInfo.t)<400 && ptrs.size===1){
+    handleTap(e.clientX,e.clientY);
+  }
+  ptrs.delete(e.pointerId); lastDist=0; tapInfo=null;
+}));
+function screenToWorld(clientX,clientY){
+  const r=canvas.getBoundingClientRect();
+  const nx=(clientX-r.left)/r.width, ny=(clientY-r.top)/r.height;
+  const vw=viewBase.vw/view.zoom, vh=viewBase.vh/view.zoom;
+  return { wx: viewBase.x+view.px+(nx-0.5)*vw, wy: viewBase.y+view.py+(0.5-ny)*vh };
+}
+function handleTap(clientX,clientY){
+  if(!skeleton||!viewBase) return;
+  const {wx,wy}=screenToWorld(clientX,clientY);
+  let found=null;
+  const order=skeleton.drawOrder||skeleton.slots;
+  for(const slot of order){
+    if(hiddenSlots.has(slot.data.name)) continue;
+    const b=slotWorldBox(slot);
+    if(!b) continue;
+    if(wx>=b.minX&&wx<=b.maxX&&wy>=b.minY&&wy<=b.maxY) found=slot;
+  }
+  if(found) selectSlotRow(found.data.name);
+  else log('Tap: tidak kena potongan manapun di titik itu.');
+}
+function selectSlotRow(name){
+  const row=document.querySelector('.slotrow[data-name="'+CSS.escape(name)+'"]');
+  if(!row){ log('Tap kena: '+trName(name)); return; }
+  document.getElementById('slotFilter').value='';
+  document.getElementById('rangeFilter').value='';
+  document.querySelectorAll('.slotrow').forEach(r=>r.style.display='flex');
+  const container=document.getElementById('slotList');
+  const cRect=container.getBoundingClientRect(), rRect=row.getBoundingClientRect();
+  const delta = (rRect.top+rRect.height/2) - (cRect.top+cRect.height/2);
+  container.scrollTo({top: Math.max(0, container.scrollTop+delta), behavior:'smooth'});
+  row.classList.add('flash');
+  setTimeout(()=>row.classList.remove('flash'),1600);
+  const locBox=row.querySelectorAll('input')[1];
+  if(locBox && !locBox.checked){
+    locBox.checked=true; highlightSlots.add(name);
+    setTimeout(()=>{ if(locBox.checked){ locBox.checked=false; highlightSlots.delete(name); } },3000);
+  }
+  log('Tap kena: '+trName(name));
+}
+canvas.addEventListener('wheel',e=>{ e.preventDefault(); zoomAt(e.deltaY<0?1.15:1/1.15,e.clientX,e.clientY); },{passive:false});
+function zoomCenter(f){ const r=canvas.getBoundingClientRect(); zoomAt(f,r.left+r.width/2,r.top+r.height/2); }
+document.getElementById('zIn').onclick=()=>zoomCenter(1.25);
+document.getElementById('zOut').onclick=()=>zoomCenter(1/1.25);
+document.getElementById('zReset').onclick=()=>{ view.zoom=1; view.px=0; view.py=0; };
+function slotWorldBox(slot){
+  const att = slot.getAttachment ? slot.getAttachment() : slot.attachment;
+  if(!att) return null;
+  let v;
+  try{
+    if(att instanceof spine.RegionAttachment){
+      v = new Float32Array(8);
+      try{ att.computeWorldVertices(slot, v, 0, 2); }
+      catch(e){ att.computeWorldVertices(slot, att.getOffsets(slot), v, 0, 2); }
+    } else if(att.worldVerticesLength){
+      const n = att.worldVerticesLength;
+      v = new Float32Array(n);
+      att.computeWorldVertices(slot, 0, n, v, 0, 2);
+    } else return null;
+  }catch(e){ return null; }
+  let minX=Infinity,minY=Infinity,maxX=-Infinity,maxY=-Infinity;
+  for(let i=0;i<v.length;i+=2){
+    if(!isFinite(v[i])||!isFinite(v[i+1])) continue;
+    minX=Math.min(minX,v[i]); maxX=Math.max(maxX,v[i]);
+    minY=Math.min(minY,v[i+1]); maxY=Math.max(maxY,v[i+1]);
+  }
+  return isFinite(minX) ? {minX,minY,maxX,maxY} : null;
+}
+function drawHighlights(){
+  const ov=document.getElementById('ov');
+  if(ov.width!==canvas.width||ov.height!==canvas.height){ ov.width=canvas.width; ov.height=canvas.height; }
+  const ctx=ov.getContext('2d');
+  ctx.clearRect(0,0,ov.width,ov.height);
+  if(!highlightSlots.size||!skeleton) return;
+  const cam=renderer.camera, z=cam.zoom||1;
+  const vw=cam.viewportWidth*z, vh=cam.viewportHeight*z;
+  const lw=Math.max(3, ov.width/300);
+  skeleton.slots.forEach(slot=>{
+    if(!highlightSlots.has(slot.data.name)) return;
+    const b=slotWorldBox(slot);
+    if(!b) return;
+    const x1=((b.minX-cam.position.x)/vw+0.5)*ov.width;
+    const x2=((b.maxX-cam.position.x)/vw+0.5)*ov.width;
+    const y1=(0.5-(b.maxY-cam.position.y)/vh)*ov.height;
+    const y2=(0.5-(b.minY-cam.position.y)/vh)*ov.height;
+    ctx.lineWidth=lw+2; ctx.strokeStyle='rgba(0,0,0,.8)'; ctx.strokeRect(x1,y1,x2-x1,y2-y1);
+    ctx.lineWidth=lw; ctx.strokeStyle='#fff'; ctx.strokeRect(x1,y1,x2-x1,y2-y1);
+  });
+}
+const nameDict = {
+"上嘴唇":"Upper Lip","上睫毛":"Upper Eyelashes","上衣后":"Top (Back)","下嘴唇":"Lower Lip","下睫毛":"Lower Eyelashes","侧睫毛":"Side Eyelashes",
+"前发一":"Front Hair 1","前发三_1":"Front Hair 3-1","前发三_2":"Front Hair 3-2","前发二_1":"Front Hair 2-1","前发二_2":"Front Hair 2-2","前发二_3":"Front Hair 2-3",
+"前发五_1":"Front Hair 5-1","前发五_2":"Front Hair 5-2","前发五_3":"Front Hair 5-3","前发五_4":"Front Hair 5-4","前发五_5":"Front Hair 5-5",
+"前发六_1":"Front Hair 6-1","前发六_3":"Front Hair 6-3","前发六_5":"Front Hair 6-5","前发六_6":"Front Hair 6-6","前发六_7":"Front Hair 6-7",
+"前发四_1":"Front Hair 4-1","前发四_2":"Front Hair 4-2","前发四_3":"Front Hair 4-3","口腔":"Mouth Interior",
+"右大臂":"Right Upper Arm","右小臂":"Right Forearm","右手书本":"Right Hand Book","右肩":"Right Shoulder",
+"右脚蝴蝶结_1":"Right Foot Bow 1","右脚蝴蝶结_2":"Right Foot Bow 2","右脚蝴蝶结_3":"Right Foot Bow 3",
+"右腰衣摆":"Right Waist Hem","右腰衣摆挂饰":"Right Waist Hem Charm","右腿裙子":"Right Leg Skirt","右膝盖":"Right Knee",
+"右领口_1":"Right Collar 1","右领口_2":"Right Collar 2","右领子_1":"Right Collar Piece 1",
+"后发发饰_1":"Back Hair Ornament 1","后发发饰_4":"Back Hair Ornament 4","后发发饰_5":"Back Hair Ornament 5","后发发饰_6":"Back Hair Ornament 6","后发发饰_7":"Back Hair Ornament 7",
+"后脑勺":"Back of Head","后衣摆右":"Back Hem Right","后衣摆左":"Back Hem Left",
+"吸管":"Straw","奶茶吸管口边缘":"Drink Straw Hole Edge","奶茶杯体":"Drink Cup Body","奶茶杯盖？":"Drink Cup Lid","奶茶珍珠":"Boba Pearls","奶茶盖子":"Drink Lid",
+"小浣熊":"Little Raccoon (plush)",
+"左大腿":"Left Thigh","左大臂":"Left Upper Arm","左小臂":"Left Forearm","左小臂袖前印花":"Left Sleeve Front Print",
+"左小臂袖后_1":"Left Sleeve Back 1","左小臂袖后蝴蝶结_1":"Left Sleeve Back Bow 1","左小臂袖后蝴蝶结_2":"Left Sleeve Back Bow 2",
+"左手中指":"Left Hand Middle Finger","左手大拇指":"Left Hand Thumb","左手小指":"Left Hand Pinky","左手手掌":"Left Hand Palm","左手无名指":"Left Hand Ring Finger","左手食指":"Left Hand Index Finger",
+"左脚蝴蝶结_1":"Left Foot Bow 1","左脚蝴蝶结_2":"Left Foot Bow 2","左脚蝴蝶结_3":"Left Foot Bow 3",
+"左腰挂饰_1":"Left Waist Charm 1","左腰挂饰_3":"Left Waist Charm 3","左腰衣摆":"Left Waist Hem","左腿裙子":"Left Leg Skirt",
+"左领子_1":"Left Collar Piece 1","左领子_2":"Left Collar Piece 2","左领子_3":"Left Collar Piece 3",
+"布料1":"Cloth/Backdrop 1","布料2":"Cloth/Backdrop 2","布料3":"Cloth/Backdrop 3","布料4":"Cloth/Backdrop 4",
+"手机挂饰":"Phone Charm","手机绳":"Phone Strap","樱花头饰":"Cherry Blossom Hair Accessory",
+"武器主体":"Weapon Body","武器挂饰":"Weapon Charm","武器装饰_1":"Weapon Decoration 1","武器装饰_3":"Weapon Decoration 3","武器装饰_4":"Weapon Decoration 4","武器装饰_5":"Weapon Decoration 5",
+"毛毯一":"Blanket 1","毛毯三":"Blanket 3","毛毯二":"Blanket 2","毛毯四":"Blanket 4",
+"毛毯底1":"Blanket Base 1","毛毯底2":"Blanket Base 2","毛毯底3":"Blanket Base 3","毛毯底4":"Blanket Base 4",
+"气泡_1":"Speech Bubble 1","气泡_2":"Speech Bubble 2","气泡_3":"Speech Bubble 3",
+"狐狸右耳":"Fox Right Ear","狐狸头":"Fox Head","狐狸头右侧气泡_4":"Fox Head Side Bubble 4",
+"狐狸尾巴_1":"Fox Tail 1","狐狸尾巴_2a":"Fox Tail 2a","狐狸尾巴_2b":"Fox Tail 2b","狐狸尾巴_3":"Fox Tail 3","狐狸尾巴补":"Fox Tail Patch",
+"狐狸左耳_1":"Fox Left Ear 1","狐狸眼白":"Fox Eye White","狐狸瞳孔":"Fox Pupil","狐狸躯干1":"Fox Torso 1","狐狸躯干2":"Fox Torso 2","狐狸躯干3":"Fox Torso 3",
+"眉毛发前":"Eyebrow","眼白":"Eye White","瞳孔":"Pupil",
+"绯英狐耳右":"Character Fox Ear Right","绯英狐耳左":"Character Fox Ear Left",
+"置顶一部分尺子":"Ruler (Top Layer Part)","脖子":"Neck","脖绳":"Neck Strap","脸":"Face",
+"脸后发一_1":"Hair Behind Face 1-1","脸后发一_2":"Hair Behind Face 1-2","脸后发一_3":"Hair Behind Face 1-3","脸后发一_4":"Hair Behind Face 1-4",
+"腰挂饰_1":"Waist Charm 1","腰部甲":"Waist Armor","裙子后":"Skirt Back","身后蝴蝶结_1":"Back Bow 1",
+"软尺1":"Tape Measure 1","软尺2":"Tape Measure 2","软尺3":"Tape Measure 3",
+"领口后":"Collar Back","领结_1":"Bow Tie 1","领结_4":"Bow Tie 4","鼻子":"Nose"
+};
+function trName(cn){ return nameDict[cn] ? nameDict[cn]+' ('+cn+')' : cn; }
+function hexToRgb01(hex){
+  hex=hex.replace('#','');
+  return [parseInt(hex.slice(0,2),16)/255, parseInt(hex.slice(2,4),16)/255, parseInt(hex.slice(4,6),16)/255];
+}
+document.querySelectorAll('.bgswatch').forEach(btn=>{
+  btn.onclick=()=>{
+    document.querySelectorAll('.bgswatch').forEach(b=>b.classList.remove('active'));
+    btn.classList.add('active');
+    bgColor=hexToRgb01(btn.dataset.bg);
+  };
+});
+document.getElementById('bgCustom').oninput=(e)=>{
+  document.querySelectorAll('.bgswatch').forEach(b=>b.classList.remove('active'));
+  bgColor=hexToRgb01(e.target.value);
+};
+function resizeCanvas(){
+  // Ukuran awal sebelum bounding box karakter diketahui; dipas-in ulang di fitCanvasToSkeleton().
+  const target = parseInt(document.getElementById('resSel').value, 10);
+  canvas.width = target;
+  canvas.height = target;
+}
+function fitCanvasToSkeleton(bboxW, bboxH){
+  const target = parseInt(document.getElementById('resSel').value, 10);
+  const aspect = bboxW / bboxH; // lebar/tinggi karakter, dengan padding
+  let w, h;
+  if (aspect >= 1) { w = target; h = Math.round(target / aspect); }
+  else { h = target; w = Math.round(target * aspect); }
+  canvas.width = w; canvas.height = h;
+  canvas.style.aspectRatio = w + '/' + h;
+}
+
+let glContext=null;
+function refitCamera(){
+  const saved=[];
+  if(hiddenSlots.size){
+    skeleton.slots.forEach(slot=>{ if(hiddenSlots.has(slot.data.name)){ saved.push([slot,slot.attachment]); slot.attachment=null; } });
+  }
+  const offset=new spine.Vector2(), size=new spine.Vector2();
+  skeleton.getBounds(offset,size,[]);
+  saved.forEach(([slot,att])=>{ slot.attachment=att; });
+  if(size.x<=0||size.y<=0){ size.x=400; size.y=400; }
+  const vw = size.x*1.15, vh = size.y*1.15;
+  fitCanvasToSkeleton(vw, vh);
+  viewBase={x:offset.x+size.x/2, y:offset.y+size.y/2, vw:vw, vh:vh};
+  view.zoom=1; view.px=0; view.py=0;
+  applyView();
+  log('Bounds: x='+offset.x.toFixed(1)+' y='+offset.y.toFixed(1)+' w='+size.x.toFixed(1)+' h='+size.y.toFixed(1));
+}
+async function renderModel(preserveHidden, keepAnimName){
+  const keepHidden = preserveHidden ? new Set(hiddenSlots) : null;
+  try{
+    if(!atlasText || !skelBuf || !texFiles.length){ log('ERROR: ada file yang belum terpilih/terbaca, coba pilih ulang ketiganya.'); return; }
+    log('Memuat…');
+    resizeCanvas();
+    glContext = new spine.ManagedWebGLRenderingContext(canvas, {alpha:true, premultipliedAlpha:true});
+    gl = glContext.gl;
+    if(!gl){ log('ERROR: WebGL tidak tersedia di browser ini.'); return; }
+    renderer = new spine.SceneRenderer(canvas, glContext);
+
+    const parsed = parseCustomAtlas(atlasText);
+    const total = parsed.pages.reduce((n,pg)=>n+pg.regions.length,0);
+    log('Atlas custom terparsing: '+parsed.pages.length+' halaman, '+total+' region.');
+    parsed.pages.forEach(pg=>log('  - '+pg.imageName+' '+pg.pageW+'x'+pg.pageH+' ('+pg.regions.length+' region, scale='+pg.scale+')'));
+    const applyFix = false;
+    const stdAtlasText = buildStandardAtlas(parsed, applyFix);
+
+    // muat semua gambar yang diupload
+    const imgs=[];
+    for(const f of texFiles){
+      const img=new Image();
+      await new Promise((res,rej)=>{ img.onload=res; img.onerror=rej; img.src=URL.createObjectURL(f); });
+      imgs.push({name:f.name,img,used:false});
+      log('Texture "'+f.name+'": '+img.naturalWidth+'x'+img.naturalHeight);
+    }
+    // cocokkan tiap halaman atlas -> gambar (nama, lalu ukuran, lalu satu-satunya)
+    const texByPage=new Map();
+    let missing=0;
+    for(const pg of parsed.pages){
+      let m=imgs.find(x=>!x.used && x.name.toLowerCase()===pg.imageName.toLowerCase());
+      if(!m) m=imgs.find(x=>!x.used && x.img.naturalWidth===pg.pageW && x.img.naturalHeight===pg.pageH);
+      if(!m && parsed.pages.length===1 && imgs.length===1) m=imgs[0];
+      let image;
+      if(m){ m.used=true; image=m.img; log('Halaman "'+pg.imageName+'" <- '+m.name);
+        if(m.img.naturalWidth!==pg.pageW||m.img.naturalHeight!==pg.pageH) log('PERINGATAN: ukuran gambar '+m.img.naturalWidth+'x'+m.img.naturalHeight+' beda dari atlas '+pg.pageW+'x'+pg.pageH+' (potongan bisa meleset).');
+      } else {
+        missing++; log('PERINGATAN: texture untuk halaman "'+pg.imageName+'" ('+pg.pageW+'x'+pg.pageH+') TIDAK ditemukan — potongan di halaman ini tidak akan tampil. Upload file tersebut.');
+        const c=document.createElement('canvas'); c.width=c.height=1; image=await createImageBitmap(c);
+      }
+      texByPage.set(pg.imageName, new spine.GLTexture(glContext, image));
+    }
+    glTex = texByPage.values().next().value;
+
+    const textureAtlas = new spine.TextureAtlas(stdAtlasText);
+    log('TextureAtlas dibuat, pages='+textureAtlas.pages.length+', regions='+textureAtlas.regions.length);
+    // loader callback tidak dipanggil otomatis di versi ini -> assign manual per halaman
+    textureAtlas.pages.forEach(p=>{ const t=texByPage.get(p.name)||glTex; if(typeof p.setTexture==='function') p.setTexture(t); else p.texture=t; });
+    textureAtlas.regions.forEach(r=>{ r.texture=r.page.texture; });
+    const atlasLoader = new spine.AtlasAttachmentLoader(textureAtlas);
+    const skelBinary = new spine.SkeletonBinary(atlasLoader);
+    skelBinary.scale = 1;
+    log('Mulai baca skeleton binary…');
+    const skeletonData = skelBinary.readSkeletonData(new Uint8Array(skelBuf));
+    log('Skeleton dimuat: "'+(skeletonData.name||'?')+'", '+skeletonData.animations.length+' animasi, '+skeletonData.bones.length+' bones.');
+
+    skeleton = new spine.Skeleton(skeletonData);
+    hiddenSlots.clear();
+    if(keepHidden) keepHidden.forEach(n=>hiddenSlots.add(n));
+    highlightSlots.clear();
+    const slotList = document.getElementById('slotList');
+    slotList.innerHTML='';
+    skeleton.slots.forEach((slot,idx)=>{
+      const row=document.createElement('div');
+      row.className='slotrow';
+      row.style.cssText='display:flex;align-items:center;gap:8px;padding:4px 0';
+      row.dataset.name = slot.data.name;
+      row.dataset.idx = idx+1;
+      const isHidden = hiddenSlots.has(slot.data.name);
+      row.innerHTML = '<label style="display:flex;align-items:center;gap:6px;flex:1;margin:0;color:var(--ink)"><input type="checkbox" '+(isHidden?'':'checked')+' style="flex:none"><span><span style="color:var(--sub)">'+(idx+1)+'.</span> '+trName(slot.data.name)+'</span></label>'
+        + '<label title="Tandai lokasi dengan kotak putih" style="margin:0;flex:none;padding:2px 4px"><input type="checkbox" class="loc" style="flex:none"></label>';
+      const boxes=row.querySelectorAll('input');
+      boxes[0].onchange = (e)=>{
+        if(e.target.checked) hiddenSlots.delete(slot.data.name);
+        else hiddenSlots.add(slot.data.name);
+      };
+      boxes[1].onchange = (e)=>{
+        if(e.target.checked) highlightSlots.add(slot.data.name);
+        else highlightSlots.delete(slot.data.name);
+      };
+      slotList.appendChild(row);
+    });
+    function applyFilters(){
+      const q=document.getElementById('slotFilter').value.toLowerCase().trim();
+      slotList.querySelectorAll('.slotrow').forEach(r=>{
+        const hay=(r.dataset.name+' '+(nameDict[r.dataset.name]||'')).toLowerCase();
+        r.style.display = hay.includes(q) ? 'flex' : 'none';
+      });
+    }
+    function applyRange(){
+      const rv=document.getElementById('rangeFilter').value.trim();
+      let lo=-Infinity, hi=Infinity, active=false;
+      if(rv){
+        const m=rv.match(/^(\d+)\s*-\s*(\d+)$/);
+        if(m){ lo=parseInt(m[1]); hi=parseInt(m[2]); active=true; }
+        else if(/^\d+$/.test(rv)){ lo=hi=parseInt(rv); active=true; }
+      }
+      slotList.querySelectorAll('.slotrow').forEach(r=>{
+        const n=parseInt(r.dataset.idx);
+        const show = !active || (n>=lo && n<=hi);
+        const cb=r.querySelectorAll('input')[0];
+        cb.checked = show;
+        if(show) hiddenSlots.delete(r.dataset.name); else hiddenSlots.add(r.dataset.name);
+      });
+    }
+    document.getElementById('slotFilter').oninput = applyFilters;
+    document.getElementById('rangeFilter').oninput = applyRange;
+    const animSel = document.getElementById('animSel');
+    animSel.innerHTML='';
+    animDurations={};
+    skeletonData.animations.forEach(a=>{ const o=document.createElement('option'); o.value=a.name; o.textContent=a.name; animSel.appendChild(o); animDurations[a.name]=a.duration||0; });
+    animSel.disabled=false;
+    document.getElementById('btnApplyLoop').disabled=false;
+
+    const stateData = new spine.AnimationStateData(skeletonData);
+    state = new spine.AnimationState(stateData);
+    const wantAnim = (keepAnimName && skeletonData.animations.some(a=>a.name===keepAnimName)) ? keepAnimName : skeletonData.animations[0].name;
+    state.setAnimation(0, wantAnim, true);
+    animSel.value = wantAnim;
+
+    skeleton.setToSetupPose();
+    if(hiddenSlots.size) skeleton.slots.forEach(slot=>{ if(hiddenSlots.has(slot.data.name)) slot.attachment=null; });
+    skeleton.updateWorldTransform();
+    refitCamera();
+    document.getElementById('btnRefit').onclick = refitCamera;
+
+    playing=true; lastTime=performance.now()/1000;
+    document.getElementById('btnPlay').disabled=false;
+    document.getElementById('btnExport').disabled=false;
+    document.getElementById('btnRefit').disabled=false;
+    requestAnimationFrame(loop);
+    log('Render dimulai.');
+  }catch(err){
+    log('ERROR: '+err.message);
+    log('STACK: '+(err.stack||'').split('\n').slice(0,4).join(' | '));
+    console.error(err);
+  }
+}
+document.getElementById('btnLoad').onclick = renderModel;
+
+document.getElementById('animSel').onchange = e => {
+  if(state) state.setAnimation(0, e.target.value, true);
+};
+document.getElementById('btnPlay').onclick = () => {
+  playing=!playing;
+  document.getElementById('btnPlay').textContent = playing?'Pause':'Play';
+};
+
+function loop(){
+  const now=performance.now()/1000;
+  const delta=now-lastTime; lastTime=now;
+  if(skeleton && state){
+    if(playing){ state.update(delta); state.apply(skeleton); }
+    skeleton.updateWorldTransform();
+    applyView();
+    gl.viewport(0,0,canvas.width,canvas.height);
+    gl.clearColor(bgColor[0],bgColor[1],bgColor[2],1);
+    gl.clear(gl.COLOR_BUFFER_BIT);
+    let savedAtt=[];
+    if(hiddenSlots.size){
+      skeleton.slots.forEach(slot=>{
+        if(hiddenSlots.has(slot.data.name)){ savedAtt.push([slot, slot.attachment]); slot.attachment=null; }
+      });
+    }
+    renderer.begin();
+    renderer.drawSkeleton(skeleton, false);
+    renderer.end();
+    savedAtt.forEach(([slot,att])=>{ slot.attachment=att; });
+    drawHighlights();
+  }
+  requestAnimationFrame(loop);
+}
+
+// ---- Export WebM ----
+const fpsInput=document.getElementById('fps'), durInput=document.getElementById('dur');
+fpsInput.oninput=()=>document.getElementById('fpsV').textContent=fpsInput.value;
+durInput.oninput=()=>document.getElementById('durV').textContent=parseFloat(durInput.value).toFixed(1);
+document.getElementById('btnApplyLoop').onclick=()=>{
+  const animName=document.getElementById('animSel').value;
+  const d=animDurations[animName];
+  if(!d){ log('Animasi "'+animName+'" tidak punya durasi gerak (statis), tidak bisa dipas-kan ke loop.'); return; }
+  const n=parseInt(document.getElementById('loopCount').value);
+  const total=d*n;
+  durInput.max=Math.max(parseFloat(durInput.max), Math.ceil(total));
+  durInput.value=total.toFixed(2);
+  document.getElementById('durV').textContent=total.toFixed(1);
+  log('Durasi export dipas-kan: '+n+'x loop animasi "'+animName+'" ('+d.toFixed(2)+'s) = '+total.toFixed(2)+'s.');
+};
+
+document.getElementById('btnExport').onclick = async () => {
+  const fps=parseInt(fpsInput.value), dur=parseFloat(durInput.value);
+  const statusEl=document.getElementById('expStatus');
+  if(!canvas.captureStream){ statusEl.textContent='Browser tidak support captureStream.'; return; }
+  const stream = canvas.captureStream(fps);
+  let mime = 'video/webm;codecs=vp9';
+  if(!MediaRecorder.isTypeSupported(mime)) mime='video/webm;codecs=vp8';
+  if(!MediaRecorder.isTypeSupported(mime)) mime='video/webm';
+  const rec = new MediaRecorder(stream, {mimeType:mime, videoBitsPerSecond:12_000_000});
+  const chunks=[];
+  rec.ondataavailable = e => { if(e.data.size) chunks.push(e.data); };
+  rec.onstop = () => {
+    const blob = new Blob(chunks, {type:'video/webm'});
+    const url = URL.createObjectURL(blob);
+    const a=document.createElement('a');
+    a.href=url; a.download='spine-export.webm'; document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(()=>URL.revokeObjectURL(url), 10000);
+    statusEl.textContent = 'Selesai — '+(blob.size/1024/1024).toFixed(2)+' MB diunduh.';
+  };
+  playing=true;
+  rec.start();
+  statusEl.textContent = 'Merekam '+dur+'s…';
+  setTimeout(()=>rec.stop(), dur*1000);
+};
+</script>
+</body>
+</html>
