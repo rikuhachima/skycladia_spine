@@ -2,5 +2,5 @@
   "1505": { "name": "Evanescia", "skel": "1505.skel", "atlas": "1505HD.atlas", "webp": ["1505HD.webp"] },
   "1005": { "name": "Kafka", "skel": "1005.skel", "atlas": "1005.atlas", "webp": ["1005.webp"] },
   "1503": { "name": "Pearl", "skel": "1503.skel", "atlas": "1503_atlas.txt", "webp": ["1503.webp", "1503_2.webp", "1503_3.webp"] },
-  "1512": { "name": "Robin Summeretto", "skel": "1512.skel", "atlas": "1512.atlas", "webp": ["1512.webp", "1512_2.webp", "1512_3.webp"] }
+  "1512": { "name": "Robin Summeretto", "skel": "1512.skel", "atlas": "1512.atlas", "webp": ["1512.webp", "1512_2.webp", "1512_3.webp"] },
 }
