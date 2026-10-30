@@ -4,5 +4,5 @@
   "1503": { "name": "Pearl", "skel": "1503.skel", "atlas": "1503_atlas.txt", "webp": ["1503.webp", "1503_2.webp", "1503_3.webp"] },
   "1512": { "name": "Robin Summeretto", "skel": "1512.skel", "atlas": "1512.atlas", "webp": ["1512.webp", "1512_2.webp", "1512_3.webp"] },
   "1006": { "name": "Silver Wolf", "skel": "1006.skel", "atlas": "1006.atlas", "webp": ["1006.webp", "1006_2.webp"] },
-  "1014": { "name": "Saber", "skel": "1014.skel", "atlas": "1014.atlas", "webp": ["1014.webp", "1014.webp"] }
+  "1014": { "name": "Saber", "skel": "1014.skel", "atlas": "1014.atlas", "webp": ["1014.webp", "1014_2.webp"] }
 }
