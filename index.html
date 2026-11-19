@@ -291,6 +291,21 @@ function parseCustomAtlas(text){
   return {pages};
 }
 
+// Sesuaikan angka atlas dengan ukuran gambar sebenarnya (mis. webp dikali 2, atlas tetap versi asli)
+function fitAtlasPageToImage(pg, w, h){
+  const sx=w/pg.pageW, sy=h/pg.pageH;
+  if(Math.abs(sx-1)<1e-9 && Math.abs(sy-1)<1e-9) return null;
+  if(Math.abs(sx-sy)/Math.max(sx,sy)>0.01)
+    throw new Error('Ukuran gambar halaman "'+pg.imageName+'" ('+w+'x'+h+') tidak proporsional terhadap atlas ('+pg.pageW+'x'+pg.pageH+'): faktor x='+sx.toFixed(3)+', y='+sy.toFixed(3)+'. Gambar harus diperbesar dengan rasio yang sama di lebar dan tinggi.');
+  const rx=v=>Math.round(v*sx), ry=v=>Math.round(v*sy);
+  for(const r of pg.regions){
+    r.bounds=[rx(r.bounds[0]),ry(r.bounds[1]),rx(r.bounds[2]),ry(r.bounds[3])];
+    if(r.offsets) r.offsets=[rx(r.offsets[0]),ry(r.offsets[1]),rx(r.offsets[2]),ry(r.offsets[3])];
+  }
+  pg.pageW=w; pg.pageH=h;
+  return {sx,sy};
+}
+
 function buildStandardAtlas(parsed, applyFix){
   let out='';
   parsed.pages.forEach((pg,pi)=>{
@@ -561,7 +576,6 @@ async function renderModel(preserveHidden, keepAnimName){
     log('Atlas custom terparsing: '+parsed.pages.length+' halaman, '+total+' region.');
     parsed.pages.forEach(pg=>log('  - '+pg.imageName+' '+pg.pageW+'x'+pg.pageH+' ('+pg.regions.length+' region, scale='+pg.scale+')'));
     const applyFix = false;
-    const stdAtlasText = buildStandardAtlas(parsed, applyFix);
 
     // muat semua gambar yang diupload
     const imgs=[];
@@ -580,7 +594,14 @@ async function renderModel(preserveHidden, keepAnimName){
       if(!m && parsed.pages.length===1 && imgs.length===1) m=imgs[0];
       let image;
       if(m){ m.used=true; image=m.img; log('Halaman "'+pg.imageName+'" <- '+m.name);
-        if(m.img.naturalWidth!==pg.pageW||m.img.naturalHeight!==pg.pageH) log('PERINGATAN: ukuran gambar '+m.img.naturalWidth+'x'+m.img.naturalHeight+' beda dari atlas '+pg.pageW+'x'+pg.pageH+' (potongan bisa meleset).');
+        const nw=m.img.naturalWidth, nh=m.img.naturalHeight;
+        const f=fitAtlasPageToImage(pg,nw,nh);
+        if(f){
+          const isInt=Math.abs(f.sx-Math.round(f.sx))<0.01;
+          log('Atlas halaman "'+pg.imageName+'" disesuaikan otomatis ke gambar '+nw+'x'+nh+' (faktor x'+f.sx.toFixed(3)+')'+(isInt?'.':' — faktor bukan bilangan bulat, posisi bisa meleset ~1px.'));
+        }
+        const maxTex=gl.getParameter(gl.MAX_TEXTURE_SIZE);
+        if(nw>maxTex||nh>maxTex) log('PERINGATAN: gambar '+nw+'x'+nh+' melebihi batas texture GPU perangkat ini ('+maxTex+'px). Hasil bisa kosong/rusak — gunakan faktor lebih kecil atau perangkat lain.');
       } else {
         missing++; log('PERINGATAN: texture untuk halaman "'+pg.imageName+'" ('+pg.pageW+'x'+pg.pageH+') TIDAK ditemukan — potongan di halaman ini tidak akan tampil. Upload file tersebut.');
         const c=document.createElement('canvas'); c.width=c.height=1; image=await createImageBitmap(c);
@@ -588,6 +609,7 @@ async function renderModel(preserveHidden, keepAnimName){
       texByPage.set(pg.imageName, new spine.GLTexture(glContext, image));
     }
     glTex = texByPage.values().next().value;
+    const stdAtlasText = buildStandardAtlas(parsed, applyFix);
 
     const textureAtlas = new spine.TextureAtlas(stdAtlasText);
     log('TextureAtlas dibuat, pages='+textureAtlas.pages.length+', regions='+textureAtlas.regions.length);
