@@ -149,11 +149,9 @@ canvas{display:block;width:100%;height:auto;aspect-ratio:4/5;touch-action:none}
       <div class="pv-slots">
         <label>Sembunyikan Bagian (Slot)</label>
         <div class="hint" style="margin:0 0 6px">Kotak kiri = tampil/sembunyi. Kotak kanan = tandai lokasi dengan kotak putih (hanya di preview, tidak ikut ter-export).</div>
-        <div class="row" style="margin-bottom:6px">
-          <div><input type="text" id="slotFilter" placeholder="Cari nama slot..." style="width:100%;background:#141210;color:var(--ink);border:1px solid var(--line);border-radius:6px;padding:7px 8px;font-size:.8rem"></div>
-          <div style="flex:0 0 110px"><input type="text" id="rangeFilter" placeholder="Nomor 1-335" style="width:100%;background:#141210;color:var(--ink);border:1px solid var(--line);border-radius:6px;padding:7px 8px;font-size:.8rem"></div>
-        </div>
-        <div class="hint" style="margin:-4px 0 6px">Kolom nomor di kanan langsung mengatur yang tampil di kanvas (bukan cuma daftar).</div>
+        <input type="text" id="slotFilter" placeholder="Cari nama slot..." style="width:100%;background:#141210;color:var(--ink);border:1px solid var(--line);border-radius:6px;padding:7px 8px;font-size:.8rem;margin-bottom:6px">
+        <input type="text" id="rangeFilter" placeholder="Nomor, mis. 1-50,60-80" style="width:100%;background:#141210;color:var(--ink);border:1px solid var(--line);border-radius:6px;padding:7px 8px;font-size:.8rem">
+        <div class="hint" style="margin:4px 0 6px">Kolom Nomor menunjukkan nomor yang sedang tampil di kanvas dan ikut berubah saat kamu mencentang. Bisa juga diketik (mis. 1-49,51-265) untuk mengatur yang tampil.</div>
         <div id="slotList" class="slotbox"></div>
         <button class="btn wide" id="btnRefit" style="margin-top:8px" disabled>Sesuaikan Ulang Kamera ke Bagian Terlihat</button>
       </div>
@@ -306,6 +304,31 @@ function fitAtlasPageToImage(pg, w, h){
   return {sx,sy};
 }
 
+// ---- Field Nomor: rentang yang tampil <-> centang slot ----
+function parseRangeSpec(text,total){
+  const set=new Set();
+  const toks=text.replace(/\s*-\s*/g,'-').split(/[,;\s]+/).filter(Boolean);
+  for(const t of toks){
+    const m=t.match(/^(\d+)-(\d+)$/);
+    if(m){ let a=+m[1], b=+m[2]; if(a>b){const x=a;a=b;b=x;} for(let k=a;k<=Math.min(b,total);k++) set.add(k); continue; }
+    if(/^\d+$/.test(t)){ set.add(+t); continue; }
+    return null; // belum valid (misal masih mengetik "1-")
+  }
+  return set;
+}
+function compressRanges(nums){
+  const v=[...nums].sort((a,b)=>a-b), out=[];
+  for(let i=0;i<v.length;){ let j=i; while(j+1<v.length && v[j+1]===v[j]+1) j++; out.push(v[i]===v[j]?String(v[i]):v[i]+'-'+v[j]); i=j+1; }
+  return out.join(',');
+}
+function syncRangeField(){
+  const rows=document.querySelectorAll('#slotList .slotrow');
+  const el=document.getElementById('rangeFilter');
+  el.placeholder='Nomor 1-'+rows.length;
+  const vis=[]; rows.forEach(r=>{ if(!hiddenSlots.has(r.dataset.name)) vis.push(parseInt(r.dataset.idx)); });
+  el.value=compressRanges(vis);
+}
+
 function buildStandardAtlas(parsed, applyFix){
   let out='';
   parsed.pages.forEach((pg,pi)=>{
@@ -407,7 +430,6 @@ function selectSlotRow(name){
   const row=document.querySelector('.slotrow[data-name="'+CSS.escape(name)+'"]');
   if(!row){ log('Tap kena: '+trName(name)); return; }
   document.getElementById('slotFilter').value='';
-  document.getElementById('rangeFilter').value='';
   document.querySelectorAll('.slotrow').forEach(r=>r.style.display='flex');
   const container=document.getElementById('slotList');
   const cRect=container.getBoundingClientRect(), rRect=row.getBoundingClientRect();
@@ -473,43 +495,28 @@ function drawHighlights(){
     ctx.lineWidth=lw; ctx.strokeStyle='#fff'; ctx.strokeRect(x1,y1,x2-x1,y2-y1);
   });
 }
-const nameDict = {
-"上嘴唇":"Upper Lip","上睫毛":"Upper Eyelashes","上衣后":"Top (Back)","下嘴唇":"Lower Lip","下睫毛":"Lower Eyelashes","侧睫毛":"Side Eyelashes",
-"前发一":"Front Hair 1","前发三_1":"Front Hair 3-1","前发三_2":"Front Hair 3-2","前发二_1":"Front Hair 2-1","前发二_2":"Front Hair 2-2","前发二_3":"Front Hair 2-3",
-"前发五_1":"Front Hair 5-1","前发五_2":"Front Hair 5-2","前发五_3":"Front Hair 5-3","前发五_4":"Front Hair 5-4","前发五_5":"Front Hair 5-5",
-"前发六_1":"Front Hair 6-1","前发六_3":"Front Hair 6-3","前发六_5":"Front Hair 6-5","前发六_6":"Front Hair 6-6","前发六_7":"Front Hair 6-7",
-"前发四_1":"Front Hair 4-1","前发四_2":"Front Hair 4-2","前发四_3":"Front Hair 4-3","口腔":"Mouth Interior",
-"右大臂":"Right Upper Arm","右小臂":"Right Forearm","右手书本":"Right Hand Book","右肩":"Right Shoulder",
-"右脚蝴蝶结_1":"Right Foot Bow 1","右脚蝴蝶结_2":"Right Foot Bow 2","右脚蝴蝶结_3":"Right Foot Bow 3",
-"右腰衣摆":"Right Waist Hem","右腰衣摆挂饰":"Right Waist Hem Charm","右腿裙子":"Right Leg Skirt","右膝盖":"Right Knee",
-"右领口_1":"Right Collar 1","右领口_2":"Right Collar 2","右领子_1":"Right Collar Piece 1",
-"后发发饰_1":"Back Hair Ornament 1","后发发饰_4":"Back Hair Ornament 4","后发发饰_5":"Back Hair Ornament 5","后发发饰_6":"Back Hair Ornament 6","后发发饰_7":"Back Hair Ornament 7",
-"后脑勺":"Back of Head","后衣摆右":"Back Hem Right","后衣摆左":"Back Hem Left",
-"吸管":"Straw","奶茶吸管口边缘":"Drink Straw Hole Edge","奶茶杯体":"Drink Cup Body","奶茶杯盖？":"Drink Cup Lid","奶茶珍珠":"Boba Pearls","奶茶盖子":"Drink Lid",
-"小浣熊":"Little Raccoon (plush)",
-"左大腿":"Left Thigh","左大臂":"Left Upper Arm","左小臂":"Left Forearm","左小臂袖前印花":"Left Sleeve Front Print",
-"左小臂袖后_1":"Left Sleeve Back 1","左小臂袖后蝴蝶结_1":"Left Sleeve Back Bow 1","左小臂袖后蝴蝶结_2":"Left Sleeve Back Bow 2",
-"左手中指":"Left Hand Middle Finger","左手大拇指":"Left Hand Thumb","左手小指":"Left Hand Pinky","左手手掌":"Left Hand Palm","左手无名指":"Left Hand Ring Finger","左手食指":"Left Hand Index Finger",
-"左脚蝴蝶结_1":"Left Foot Bow 1","左脚蝴蝶结_2":"Left Foot Bow 2","左脚蝴蝶结_3":"Left Foot Bow 3",
-"左腰挂饰_1":"Left Waist Charm 1","左腰挂饰_3":"Left Waist Charm 3","左腰衣摆":"Left Waist Hem","左腿裙子":"Left Leg Skirt",
-"左领子_1":"Left Collar Piece 1","左领子_2":"Left Collar Piece 2","左领子_3":"Left Collar Piece 3",
-"布料1":"Cloth/Backdrop 1","布料2":"Cloth/Backdrop 2","布料3":"Cloth/Backdrop 3","布料4":"Cloth/Backdrop 4",
-"手机挂饰":"Phone Charm","手机绳":"Phone Strap","樱花头饰":"Cherry Blossom Hair Accessory",
-"武器主体":"Weapon Body","武器挂饰":"Weapon Charm","武器装饰_1":"Weapon Decoration 1","武器装饰_3":"Weapon Decoration 3","武器装饰_4":"Weapon Decoration 4","武器装饰_5":"Weapon Decoration 5",
-"毛毯一":"Blanket 1","毛毯三":"Blanket 3","毛毯二":"Blanket 2","毛毯四":"Blanket 4",
-"毛毯底1":"Blanket Base 1","毛毯底2":"Blanket Base 2","毛毯底3":"Blanket Base 3","毛毯底4":"Blanket Base 4",
-"气泡_1":"Speech Bubble 1","气泡_2":"Speech Bubble 2","气泡_3":"Speech Bubble 3",
-"狐狸右耳":"Fox Right Ear","狐狸头":"Fox Head","狐狸头右侧气泡_4":"Fox Head Side Bubble 4",
-"狐狸尾巴_1":"Fox Tail 1","狐狸尾巴_2a":"Fox Tail 2a","狐狸尾巴_2b":"Fox Tail 2b","狐狸尾巴_3":"Fox Tail 3","狐狸尾巴补":"Fox Tail Patch",
-"狐狸左耳_1":"Fox Left Ear 1","狐狸眼白":"Fox Eye White","狐狸瞳孔":"Fox Pupil","狐狸躯干1":"Fox Torso 1","狐狸躯干2":"Fox Torso 2","狐狸躯干3":"Fox Torso 3",
-"眉毛发前":"Eyebrow","眼白":"Eye White","瞳孔":"Pupil",
-"绯英狐耳右":"Character Fox Ear Right","绯英狐耳左":"Character Fox Ear Left",
-"置顶一部分尺子":"Ruler (Top Layer Part)","脖子":"Neck","脖绳":"Neck Strap","脸":"Face",
-"脸后发一_1":"Hair Behind Face 1-1","脸后发一_2":"Hair Behind Face 1-2","脸后发一_3":"Hair Behind Face 1-3","脸后发一_4":"Hair Behind Face 1-4",
-"腰挂饰_1":"Waist Charm 1","腰部甲":"Waist Armor","裙子后":"Skirt Back","身后蝴蝶结_1":"Back Bow 1",
-"软尺1":"Tape Measure 1","软尺2":"Tape Measure 2","软尺3":"Tape Measure 3",
-"领口后":"Collar Back","领结_1":"Bow Tie 1","领结_4":"Bow Tie 4","鼻子":"Nose"
-};
+let nameDict = {};
+// Kamus terjemahan nama slot dibaca dari assets/names.txt (format: nama asli = terjemahan, satu per baris)
+const namesReady = (async ()=>{
+  try{
+    const res = await fetch('assets/names.txt');
+    if(!res.ok) throw new Error('HTTP '+res.status);
+    const text = (await res.text()).replace(/^\uFEFF/,'');
+    const d = {};
+    text.split(/\r?\n/).forEach(line=>{
+      const l=line.trim();
+      if(!l || l.startsWith('#')) return;
+      const i=l.indexOf('=');
+      if(i<1) return;
+      const k=l.slice(0,i).trim(), v=l.slice(i+1).trim();
+      if(k && v) d[k]=v;
+    });
+    nameDict = d;
+  }catch(err){
+    console.warn('assets/names.txt tidak dimuat:', err.message);
+    log('Kamus nama slot (assets/names.txt) tidak dimuat ('+err.message+') — nama slot tampil apa adanya.');
+  }
+})();
 function trName(cn){ return nameDict[cn] ? nameDict[cn]+' ('+cn+')' : cn; }
 function hexToRgb01(hex){
   hex=hex.replace('#','');
@@ -563,6 +570,7 @@ function refitCamera(){
 async function renderModel(preserveHidden, keepAnimName){
   const keepHidden = preserveHidden ? new Set(hiddenSlots) : null;
   try{
+    await namesReady;
     if(!atlasText || !skelBuf || !texFiles.length){ log('ERROR: ada file yang belum terpilih/terbaca, coba pilih ulang ketiganya.'); return; }
     log('Memuat…');
     resizeCanvas();
@@ -642,6 +650,7 @@ async function renderModel(preserveHidden, keepAnimName){
       boxes[0].onchange = (e)=>{
         if(e.target.checked) hiddenSlots.delete(slot.data.name);
         else hiddenSlots.add(slot.data.name);
+        syncRangeField();
       };
       boxes[1].onchange = (e)=>{
         if(e.target.checked) highlightSlots.add(slot.data.name);
@@ -657,23 +666,20 @@ async function renderModel(preserveHidden, keepAnimName){
       });
     }
     function applyRange(){
-      const rv=document.getElementById('rangeFilter').value.trim();
-      let lo=-Infinity, hi=Infinity, active=false;
-      if(rv){
-        const m=rv.match(/^(\d+)\s*-\s*(\d+)$/);
-        if(m){ lo=parseInt(m[1]); hi=parseInt(m[2]); active=true; }
-        else if(/^\d+$/.test(rv)){ lo=hi=parseInt(rv); active=true; }
-      }
-      slotList.querySelectorAll('.slotrow').forEach(r=>{
-        const n=parseInt(r.dataset.idx);
-        const show = !active || (n>=lo && n<=hi);
-        const cb=r.querySelectorAll('input')[0];
-        cb.checked = show;
+      const rows=slotList.querySelectorAll('.slotrow');
+      const raw=document.getElementById('rangeFilter').value.trim();
+      let set=null;
+      if(raw){ set=parseRangeSpec(raw,rows.length); if(!set) return; } // masih mengetik: jangan ubah apa-apa
+      rows.forEach(r=>{
+        const show = !set || set.has(parseInt(r.dataset.idx));
+        r.querySelectorAll('input')[0].checked = show;
         if(show) hiddenSlots.delete(r.dataset.name); else hiddenSlots.add(r.dataset.name);
       });
     }
     document.getElementById('slotFilter').oninput = applyFilters;
     document.getElementById('rangeFilter').oninput = applyRange;
+    document.getElementById('rangeFilter').onblur = syncRangeField;
+    syncRangeField();
     const animSel = document.getElementById('animSel');
     animSel.innerHTML='';
     animDurations={};
