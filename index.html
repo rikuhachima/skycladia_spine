@@ -150,6 +150,11 @@ canvas{display:block;width:100%;height:auto;aspect-ratio:4/5;touch-action:none}
         <label>Sembunyikan Bagian (Slot)</label>
         <div class="hint" style="margin:0 0 6px">Kotak kiri = tampil/sembunyi. Kotak kanan = tandai lokasi dengan kotak putih (hanya di preview, tidak ikut ter-export).</div>
         <input type="text" id="slotFilter" placeholder="Cari nama slot..." style="width:100%;background:#141210;color:var(--ink);border:1px solid var(--line);border-radius:6px;padding:7px 8px;font-size:.8rem;margin-bottom:6px">
+        <div class="btns" style="margin:0 0 6px;align-items:center">
+          <button class="btn bgbtn" id="btnCheckAll">Centang semua</button>
+          <button class="btn bgbtn" id="btnUncheckAll">Hapus semua centang</button>
+          <span class="hint" id="matchCount" style="margin:0"></span>
+        </div>
         <input type="text" id="rangeFilter" placeholder="Nomor, mis. 1-50,60-80" style="width:100%;background:#141210;color:var(--ink);border:1px solid var(--line);border-radius:6px;padding:7px 8px;font-size:.8rem">
         <div class="hint" style="margin:4px 0 6px">Kolom Nomor menunjukkan nomor yang sedang tampil di kanvas dan ikut berubah saat kamu mencentang. Bisa juga diketik (mis. 1-49,51-265) untuk mengatur yang tampil.</div>
         <div id="slotList" class="slotbox"></div>
@@ -242,6 +247,7 @@ function checkReady(){ setTimeout(()=>{ btnLoad.disabled = !(atlasText && skelBu
 
           hint.textContent='Merender '+c.name+'...';
           checkReady();
+          await loadNames(base+'names.txt');
           await renderModel();
           hint.textContent=c.name+' siap.';
         }catch(err){
@@ -328,6 +334,24 @@ function syncRangeField(){
   const vis=[]; rows.forEach(r=>{ if(!hiddenSlots.has(r.dataset.name)) vis.push(parseInt(r.dataset.idx)); });
   el.value=compressRanges(vis);
 }
+
+// ---- Centang / hapus centang semua slot yang cocok dengan pencarian ----
+function setVisibleRows(checked){
+  document.querySelectorAll('#slotList .slotrow').forEach(r=>{
+    if(r.style.display==='none') return; // hanya yang cocok dengan pencarian
+    r.querySelectorAll('input')[0].checked=checked;
+    if(checked) hiddenSlots.delete(r.dataset.name); else hiddenSlots.add(r.dataset.name);
+  });
+  syncRangeField();
+}
+function updateMatchCount(){
+  const rows=[...document.querySelectorAll('#slotList .slotrow')];
+  const q=document.getElementById('slotFilter').value.trim();
+  const n=rows.filter(r=>r.style.display!=='none').length;
+  document.getElementById('matchCount').textContent = rows.length ? (q ? n+' dari '+rows.length+' slot cocok' : rows.length+' slot') : '';
+}
+document.getElementById('btnCheckAll').onclick=()=>setVisibleRows(true);
+document.getElementById('btnUncheckAll').onclick=()=>setVisibleRows(false);
 
 function buildStandardAtlas(parsed, applyFix){
   let out='';
@@ -431,6 +455,7 @@ function selectSlotRow(name){
   if(!row){ log('Tap kena: '+trName(name)); return; }
   document.getElementById('slotFilter').value='';
   document.querySelectorAll('.slotrow').forEach(r=>r.style.display='flex');
+  updateMatchCount();
   const container=document.getElementById('slotList');
   const cRect=container.getBoundingClientRect(), rRect=row.getBoundingClientRect();
   const delta = (rRect.top+rRect.height/2) - (cRect.top+cRect.height/2);
@@ -496,27 +521,31 @@ function drawHighlights(){
   });
 }
 let nameDict = {};
-// Kamus terjemahan nama slot dibaca dari assets/names.txt (format: nama asli = terjemahan, satu per baris)
-const namesReady = (async ()=>{
+// Kamus terjemahan nama slot dibaca per karakter dari assets/<id>/names.txt
+// (format: nama asli = terjemahan, satu per baris). Opsional: kalau tidak ada, nama tampil apa adanya.
+function parseNames(text){
+  const d={};
+  text.replace(/^\uFEFF/,'').split(/\r?\n/).forEach(line=>{
+    const l=line.trim();
+    if(!l || l.startsWith('#')) return;
+    const i=l.indexOf('=');
+    if(i<1) return;
+    const k=l.slice(0,i).trim(), v=l.slice(i+1).trim();
+    if(k && v) d[k]=v;
+  });
+  return d;
+}
+async function loadNames(url){
   try{
-    const res = await fetch('assets/names.txt');
+    const res=await fetch(url);
     if(!res.ok) throw new Error('HTTP '+res.status);
-    const text = (await res.text()).replace(/^\uFEFF/,'');
-    const d = {};
-    text.split(/\r?\n/).forEach(line=>{
-      const l=line.trim();
-      if(!l || l.startsWith('#')) return;
-      const i=l.indexOf('=');
-      if(i<1) return;
-      const k=l.slice(0,i).trim(), v=l.slice(i+1).trim();
-      if(k && v) d[k]=v;
-    });
-    nameDict = d;
+    nameDict=parseNames(await res.text());
+    log('Kamus nama slot dimuat: '+Object.keys(nameDict).length+' entri.');
   }catch(err){
-    console.warn('assets/names.txt tidak dimuat:', err.message);
-    log('Kamus nama slot (assets/names.txt) tidak dimuat ('+err.message+') — nama slot tampil apa adanya.');
+    nameDict={};
+    log('Tidak ada kamus nama slot ('+url+', '+err.message+') — nama slot tampil apa adanya.');
   }
-})();
+}
 function trName(cn){ return nameDict[cn] ? nameDict[cn]+' ('+cn+')' : cn; }
 function hexToRgb01(hex){
   hex=hex.replace('#','');
@@ -570,7 +599,6 @@ function refitCamera(){
 async function renderModel(preserveHidden, keepAnimName){
   const keepHidden = preserveHidden ? new Set(hiddenSlots) : null;
   try{
-    await namesReady;
     if(!atlasText || !skelBuf || !texFiles.length){ log('ERROR: ada file yang belum terpilih/terbaca, coba pilih ulang ketiganya.'); return; }
     log('Memuat…');
     resizeCanvas();
@@ -664,6 +692,7 @@ async function renderModel(preserveHidden, keepAnimName){
         const hay=(r.dataset.name+' '+(nameDict[r.dataset.name]||'')).toLowerCase();
         r.style.display = hay.includes(q) ? 'flex' : 'none';
       });
+      updateMatchCount();
     }
     function applyRange(){
       const rows=slotList.querySelectorAll('.slotrow');
@@ -680,6 +709,7 @@ async function renderModel(preserveHidden, keepAnimName){
     document.getElementById('rangeFilter').oninput = applyRange;
     document.getElementById('rangeFilter').onblur = syncRangeField;
     syncRangeField();
+    updateMatchCount();
     const animSel = document.getElementById('animSel');
     animSel.innerHTML='';
     animDurations={};
