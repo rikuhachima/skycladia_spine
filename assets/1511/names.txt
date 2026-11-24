@@ -1,0 +1,111 @@
+# Kamus terjemahan nama slot untuk Aeon Aha (1511)
+# Format: nama asli di file skeleton = terjemahan   (satu per baris)
+# Baris yang diawali tanda # dan baris kosong diabaikan.
+# Nama berbahasa Inggris (L_eye_01, dress_03, hair_01, dst) tidak perlu dimasukkan, sudah terbaca apa adanya.
+# Kunci diambil dari nama region di atlas. Nama slot di skeleton biasanya sama, tapi
+# yang berbeda akan tetap tampil apa adanya.
+
+BG头发1 = BG Hair 1
+BG头发2 = BG Hair 2
+BG头发3 = BG Hair 3
+BG头发4 = BG Hair 4
+BG头发5 = BG Hair 5
+BG头发6 = BG Hair 6
+BG头发7 = BG Hair 7
+BG头发8 = BG Hair 8
+BG头发9 = BG Hair 9
+BG头发10 = BG Hair 10
+BG头发11 = BG Hair 11
+BG头发12 = BG Hair 12
+BG头发13 = BG Hair 13
+BG头发14 = BG Hair 14
+
+外发光1 = Outer Glow 1
+外发光2 = Outer Glow 2
+外发光3 = Outer Glow 3
+外发光4 = Outer Glow 4
+外发光5 = Outer Glow 5
+外发光6 = Outer Glow 6
+外发光7 = Outer Glow 7
+外发光8 = Outer Glow 8
+外发光9 = Outer Glow 9
+外发光10 = Outer Glow 10
+外发光11 = Outer Glow 11
+外发光12 = Outer Glow 12
+
+# perkiraan: 炫彩 = warna berkilau/iridescent, 边 = tepi
+炫彩边 = Iridescent Edge
+
+# perkiraan: 神 = ilahi, 虚照 = cahaya semu/bayangan (nama layer efek, artinya tidak pasti)
+神虚照2 = Divine Illusory Light 2
+
+粉尘2 = Dust 2
+粉尘5 = Dust 5
+
+背景人01 = Background Figure 01
+背景人02 = Background Figure 02
+背景人03 = Background Figure 03
+背景人04 = Background Figure 04
+背景人05 = Background Figure 05
+背景人06 = Background Figure 06
+背景人07 = Background Figure 07
+背景人08 = Background Figure 08
+背景人09 = Background Figure 09
+背景人10 = Background Figure 10
+背景人11 = Background Figure 11
+背景人12 = Background Figure 12
+背景人13 = Background Figure 13
+背景人14 = Background Figure 14
+背景人15 = Background Figure 15
+背景人16 = Background Figure 16
+背景人17 = Background Figure 17
+背景人18 = Background Figure 18
+背景人20 = Background Figure 20
+背景人21 = Background Figure 21
+背景人22 = Background Figure 22
+背景人23 = Background Figure 23
+背景人24 = Background Figure 24
+背景人25 = Background Figure 25
+背景人26 = Background Figure 26
+背景人27 = Background Figure 27
+背景人28 = Background Figure 28
+背景人29 = Background Figure 29
+背景人30 = Background Figure 30
+背景人31 = Background Figure 31
+背景人32 = Background Figure 32
+背景人33 = Background Figure 33
+背景人34 = Background Figure 34
+背景人35 = Background Figure 35
+背景人36 = Background Figure 36
+背景人37 = Background Figure 37
+
+# perkiraan: 虚照 = cahaya semu/bayangan (artinya tidak pasti)
+虚照外发光2 = Illusory Light Outer Glow 2
+虚照外发光3 = Illusory Light Outer Glow 3
+虚照外发光5 = Illusory Light Outer Glow 5
+虚照外发光7 = Illusory Light Outer Glow 7
+
+光柱1-1 = Light Pillar 1-1
+光柱2-1 = Light Pillar 2-1
+光柱3 = Light Pillar 3
+光柱4-1 = Light Pillar 4-1
+光柱6 = Light Pillar 6
+光柱7 = Light Pillar 7
+光柱76-2 = Light Pillar 76-2
+
+图层 65 副本 = Layer 65 Copy
+图层 66 = Layer 66
+
+星球1 = Planet 1
+星球2 = Planet 2
+星球3 = Planet 3
+
+烟花1-1 = Fireworks 1-1
+烟花1-2 = Fireworks 1-2
+烟花1-3 = Fireworks 1-3
+烟花2-1 = Fireworks 2-1
+烟花2-2 = Fireworks 2-2
+烟花2-3 = Fireworks 2-3
+烟花3-1 = Fireworks 3-1
+烟花3-2 = Fireworks 3-2
+烟花3-3 = Fireworks 3-3
