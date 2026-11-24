@@ -5,7 +5,7 @@
 # Kunci diambil dari nama region di atlas. Nama slot di skeleton biasanya sama, tapi
 # yang berbeda akan tetap tampil apa adanya.
 
-神虚照 = Aeon Elation
+神虚照2 = Aeon Elation
 BG头发1 = BG Hair 1
 BG头发2 = BG Hair 2
 BG头发3 = BG Hair 3
