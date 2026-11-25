@@ -81,12 +81,10 @@ canvas{display:block;width:100%;height:auto;aspect-ratio:4/5;touch-action:none}
 <body>
 <header>
   <h1>Spine Viewer &amp; WebM Exporter</h1>
-  <p class="sub">Render karakter Spine (.skel + .atlas custom + texture) langsung di browser, lalu rekam jadi WebM. Format atlas ini pakai field <span class="pill">bounds/offsets</span> non-standar — dikonversi otomatis ke format Spine biasa.</p>
 </header>
 <main>
   <div class="panel">
     <h2>1 &middot; Muat Model</h2>
-    <label>Pilih Karakter (dari folder assets/)</label>
     <div id="charPicker" class="btns" style="margin-top:0">
       <span class="hint" style="margin:0">Memuat daftar karakter...</span>
     </div>
@@ -122,7 +120,6 @@ canvas{display:block;width:100%;height:auto;aspect-ratio:4/5;touch-action:none}
           <button class="btn" id="zOut" style="min-width:44px">&minus;</button>
           <button class="btn" id="zIn" style="min-width:44px">+</button>
           <button class="btn" id="zReset">Reset Zoom</button>
-          <span class="hint" style="margin:0">Cubit 2 jari = zoom, geser 1 jari = pindah. Ikut terekam di WebM.</span>
         </div>
         <div class="row" style="margin-top:10px">
           <div>
@@ -147,16 +144,13 @@ canvas{display:block;width:100%;height:auto;aspect-ratio:4/5;touch-action:none}
         </div>
       </div>
       <div class="pv-slots">
-        <label>Sembunyikan Bagian (Slot)</label>
-        <div class="hint" style="margin:0 0 6px">Kotak kiri = tampil/sembunyi. Kotak kanan = tandai lokasi dengan kotak putih (hanya di preview, tidak ikut ter-export).</div>
-        <input type="text" id="slotFilter" placeholder="Cari nama slot..." style="width:100%;background:#141210;color:var(--ink);border:1px solid var(--line);border-radius:6px;padding:7px 8px;font-size:.8rem;margin-bottom:6px">
+        <input type="text" id="slotFilter" placeholder="Cari nama bagian..." style="width:100%;background:#141210;color:var(--ink);border:1px solid var(--line);border-radius:6px;padding:7px 8px;font-size:.8rem;margin-bottom:6px">
         <div class="btns" style="margin:0 0 6px;align-items:center">
           <button class="btn bgbtn" id="btnCheckAll">Centang semua</button>
           <button class="btn bgbtn" id="btnUncheckAll">Hapus semua centang</button>
           <span class="hint" id="matchCount" style="margin:0"></span>
         </div>
         <input type="text" id="rangeFilter" placeholder="Nomor, mis. 1-50,60-80" style="width:100%;background:#141210;color:var(--ink);border:1px solid var(--line);border-radius:6px;padding:7px 8px;font-size:.8rem">
-        <div class="hint" style="margin:4px 0 6px">Kolom Nomor menunjukkan nomor yang sedang tampil di kanvas dan ikut berubah saat kamu mencentang. Bisa juga diketik (mis. 1-49,51-265) untuk mengatur yang tampil.</div>
         <div id="slotList" class="slotbox"></div>
         <button class="btn wide" id="btnRefit" style="margin-top:8px" disabled>Sesuaikan Ulang Kamera ke Bagian Terlihat</button>
       </div>
@@ -167,8 +161,11 @@ canvas{display:block;width:100%;height:auto;aspect-ratio:4/5;touch-action:none}
     <h2>3 &middot; Export WebM</h2>
     <div class="row">
       <div>
-        <label>Frame Rate: <span id="fpsV">30</span></label>
-        <input type="range" id="fps" min="15" max="60" value="30">
+        <label>Frame Rate</label>
+        <select id="fps">
+          <option value="30" selected>30 fps</option>
+          <option value="60">60 fps</option>
+        </select>
       </div>
       <div>
         <label>Durasi (detik): <span id="durV">3</span></label>
@@ -259,7 +256,7 @@ function checkReady(){ setTimeout(()=>{ btnLoad.disabled = !(atlasText && skelBu
     if(!Object.keys(chars).length) hint.textContent='characters.json kosong.';
   }catch(err){
     picker.innerHTML='';
-    hint.textContent='Tidak bisa memuat daftar karakter (assets/characters.json). Kalau kamu buka file ini langsung dari HP/komputer tanpa di-host, ini wajar — gunakan upload manual di bawah. '+err.message;
+    log('Gagal memuat daftar karakter (assets/characters.json): '+err.message);
   }
 })();
 
@@ -348,7 +345,7 @@ function updateMatchCount(){
   const rows=[...document.querySelectorAll('#slotList .slotrow')];
   const q=document.getElementById('slotFilter').value.trim();
   const n=rows.filter(r=>r.style.display!=='none').length;
-  document.getElementById('matchCount').textContent = rows.length ? (q ? n+' dari '+rows.length+' slot cocok' : rows.length+' slot') : '';
+  document.getElementById('matchCount').textContent = rows.length ? (q ? n+' dari '+rows.length+' bagian cocok' : rows.length+' bagian') : '';
 }
 document.getElementById('btnCheckAll').onclick=()=>setVisibleRows(true);
 document.getElementById('btnUncheckAll').onclick=()=>setVisibleRows(false);
@@ -540,10 +537,10 @@ async function loadNames(url){
     const res=await fetch(url);
     if(!res.ok) throw new Error('HTTP '+res.status);
     nameDict=parseNames(await res.text());
-    log('Kamus nama slot dimuat: '+Object.keys(nameDict).length+' entri.');
+    log('Kamus nama bagian dimuat: '+Object.keys(nameDict).length+' entri.');
   }catch(err){
     nameDict={};
-    log('Tidak ada kamus nama slot ('+url+', '+err.message+') — nama slot tampil apa adanya.');
+    log('Tidak ada kamus nama bagian ('+url+', '+err.message+') — nama bagian tampil apa adanya.');
   }
 }
 function trName(cn){ return nameDict[cn] ? nameDict[cn]+' ('+cn+')' : cn; }
@@ -778,7 +775,6 @@ function loop(){
 
 // ---- Export WebM ----
 const fpsInput=document.getElementById('fps'), durInput=document.getElementById('dur');
-fpsInput.oninput=()=>document.getElementById('fpsV').textContent=fpsInput.value;
 durInput.oninput=()=>document.getElementById('durV').textContent=parseFloat(durInput.value).toFixed(1);
 document.getElementById('btnApplyLoop').onclick=()=>{
   const animName=document.getElementById('animSel').value;
