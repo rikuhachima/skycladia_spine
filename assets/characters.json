@@ -6,5 +6,6 @@
   "1006": { "name": "Silver Wolf", "skel": "1006.skel", "atlas": "1006.atlas", "webp": ["1006.webp", "1006_2.webp"] },
   "1014": { "name": "Saber", "skel": "1014.skel", "atlas": "1014.atlas", "webp": ["1014.webp", "1014_2.webp"] },
   "1511": { "name": "Aeon Aha", "skel": "1511.skel", "atlas": "1511.atlas", "webp": ["1511.webp", "1511_2.webp", "1511_3.webp"] },
-  "1015": { "name": "Archer", "skel": "1015.skel", "atlas": "1015.atlas", "webp": ["1015.webp", "1015_2.webp", "1015_3.webp"] }
+  "1015": { "name": "Archer", "skel": "1015.skel", "atlas": "1015.atlas", "webp": ["1015.webp", "1015_2.webp", "1015_3.webp"] },
+  "8010": { "name": "Stelle", "skel": "8010.skel", "atlas": "8010.atlas", "webp": ["8010.webp", "8010_2.webp"] }
 }
